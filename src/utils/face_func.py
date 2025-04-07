@@ -91,6 +91,6 @@ def refresh_embeddings(images_directory,face_detector, face_recognizer):
         # Adaugare in dictionar date obtinute
         dictionary[user] = feature
     # Salvare sub forma de fisier .npy (.npy permite serializarea obiectelor)
-    np.save(r"C:\Users\stefa\OneDrive\Desktop\Nokia\Face-Recognition---Test\data\embeddings.npy", dictionary)
+    np.save(r"data/embeddings.npy", dictionary)
 
 

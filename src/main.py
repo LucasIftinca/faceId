@@ -1,7 +1,7 @@
 import os
 import cv2
 from utils.loadings import load_models, load_embeddings
-from utils. face_func import refresh_embeddings, process_frame
+from utils.face_func import refresh_embeddings, process_frame
 
 # Director principal
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -17,7 +17,7 @@ refresh_embeddings(IMAGES_DIR, face_detector, face_recognizer)
 # Initializare dictitionar embeddinng-uri
 embeddings = load_embeddings()
 
-capture = cv2.VideoCapture(0)
+capture = cv2.VideoCapture(1)
 
 if not capture.isOpened:
     print("EROARE CAMERA")

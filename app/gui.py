@@ -1,65 +1,52 @@
 import os
 import shutil
+
 import tkinter
-from tkinter.filedialog import askopenfilename
-from tkinter import messagebox
+from tkinter import messagebox, ttk
+
 import customtkinter
 
+from utils_gui import tree_init, import_images
+
 # PATHS & GLOBAL VARIABLES
-data_folder = r"datadata/images"
+data_folder = r"datadata/images"                                                                                  # PATH to image folder
 
 # SYSTEM SETTINGS
-customtkinter.set_appearance_mode("Dark")
-customtkinter.set_default_color_theme("blue")
+customtkinter.set_appearance_mode("Dark")                                                                         # Set appearance mode to Dark
+customtkinter.set_default_color_theme("blue")                                                                     # Set color theme to blue
 
 # APP FRAME
 def init_app():
-  frame = customtkinter.CTk()
-  frame.geometry("460x320")                                                                   # Set width and height
-  frame.title("Face Recognition")                                                             # Titlebar name
-  frame.resizable(False, False)                                                               # Set resizable width = False & height = False, to keep window a predetermined size
+    frame = customtkinter.CTk()
+    frame.geometry("460x320")                                                                                     # Set width and height
+    frame.title("Face Recognition")                                                                               # Titlebar name
+    frame.resizable(False, False)                                                                                 # Disable resizing
 
-  # WIDGETS CONTROL
+    # WIDGETS CONTROL
 
-  # Open File Explorer button (frame = current window)
-  button_file_explore = customtkinter.CTkButton(frame, text="Add New Employee", command=button_file_explore_event, width=140, height=28)
-  button_file_explore.place(x=160, y=99)                                                      # Place button at x = 160, y = 99
+    # BUTTONS
+    button_file_explore = customtkinter.CTkButton(frame, text="Add New Employee", command=button_file_explore_event)  # Open File Explorer button
+    #button_file_explore.place(x=160, y=99, width=140, height=28)                                                     # Place button
 
-  # Open Employee List button
-  button_emp_list = customtkinter.CTkButton(frame, text="Open Employee List", command=button_emp_list_event, width=140, height=28)
-  button_emp_list.place(x=160, y=146)                                                         # Place button at x = 160, y = 146
+    button_emp_list = customtkinter.CTkButton(frame, text="Manage Employee List", command=button_emp_list_event)      # Open Employee List button
+    #button_emp_list.place(x=160, y=146, width=140, height=28)                                                        # Place button
 
- # Open Employee List button
-  button_emp_list = customtkinter.CTkButton(frame, text="Add New Employee", command=button_emp_list_event, width=140, height=28)
-  button_emp_list.place(x=160, y=146)                                                         # Place button at x = 160, y = 146
+    button_emp_list = customtkinter.CTkButton(frame, text="Add New Employee", command=button_emp_list_event)         # Duplicate: Add New Employee
+    #button_emp_list.place(x=160, y=146, width=140, height=28)                                                       # Place button
 
-  frame.mainloop()                                                                            # Mainloop, calls app to start
+    #tree_init(frame)                                                                                                 # Initialize the Treeview
+
+    frame.mainloop()                                                                                                 # Start app main loop
 
 # WIDGET LISTENERS
-def button_file_explore_event():                                                              # Click button event -> opens File Explorer to select an image
-  file_path = askopenfilename()                                                               # Open file explorer -> get image path
+def button_file_explore_event():                                                                                   # File Explorer button click
+    import_images(data_folder)                                                                                     # Import image file to folder
 
-  if file_path and file_path.lower().endswith((".png", ".jpg", ".jpeg")):                     # Check if path is correct and image has correct extension
-    file_name    = os.path.basename(file_path)                                                # Extract file name
-    target_path  = os.path.join(data_folder, file_name)                                       # Build destination path by joining the data_folder (folder containg the images to be used for embedings) with the file name
-    print("Final file path = ", target_path)                                                  # TEST to see final file path in data dir
-    
-    try: 
-      shutil.move(file_path, target_path)                                                     # Move file to data folder (folder containg the images to be used for embedings) 
-    except Exception as e:
-        messagebox.showinfo("Error", f"Error ecountered : {e}")                               # Print error 
-  else:
-    messagebox.showinfo("Error", "Wrong File Format")                                         # Show error message inside Message Box
+def button_emp_list_event():                                                                                       # Employee List button click
+    print("Employee List")                                                                                         # Placeholder print
 
-
-
-# Button: Open Employee List
-def button_emp_list_event():
-  print("Employee List")
-
-# Button: Add Employee (not used yet)
-def button_add_emp_event():
-  print("Add Employee")
+def button_add_emp_event():                                                                                        # Add Employee button click
+    print("Add Employee")                                                                                          # Placeholder print
 
 # FUNCTION CALLERS
-init_app()                                                                                     # Call init_app function
+init_app()                                                                                                         # Call init_app function
