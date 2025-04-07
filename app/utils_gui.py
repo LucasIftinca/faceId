@@ -1,5 +1,6 @@
 import os
 import shutil
+import socket
 
 import tkinter
 from tkinter import messagebox, ttk
@@ -47,3 +48,34 @@ def import_images(data_folder):
         messagebox.showinfo("Error", "Wrong File Format")                                        # Show error message for invalid file type
 
 
+def connection_to_raspi():
+    HOST = 'raspberrypi.local'  # or the static IP like '192.168.137.2'
+    PORT = 12345
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.connect((HOST, PORT))
+        s.sendall(b"Hello from PC")
+        data = s.recv(1024)
+
+    print('Received from Pi:', data.decode())
+
+
+# # server_pi.py
+# import socket
+
+# HOST = '0.0.0.0'
+# PORT = 12345
+
+# with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+#     s.bind((HOST, PORT))
+#     s.listen()
+#     print(f"Listening on {PORT}...")
+#     conn, addr = s.accept()
+#     with conn:
+#         print('Connected by', addr)
+#         while True:
+#             data = conn.recv(1024)
+#             if not data:
+#                 break
+#             print("Received:", data.decode())
+#             conn.sendall(b"Hello from Pi")
