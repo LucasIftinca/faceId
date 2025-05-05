@@ -25,8 +25,8 @@ def init_app():
     # WIDGETS CONTROL
 
     # BUTTONS
-    button_file_explore = customtkinter.CTkButton(frame, text="Add New Employee", command=button_file_explore_event)  # Open File Explorer button
-    #button_file_explore.place(x=160, y=99, width=140, height=28)                                                     # Place button
+    button_file_explore = customtkinter.CTkButton(frame, text="Add New Employee", command=button_file_explore_event, width=140, height=28)  # Open File Explorer button
+    #button_file_explore.place(x=160, y=99)                                                     # Place button
 
     button_emp_list = customtkinter.CTkButton(frame, text="Manage Employee List", command=button_emp_list_event)      # Open Employee List button
     #button_emp_list.place(x=160, y=146, width=140, height=28)                                                        # Place button
@@ -34,7 +34,7 @@ def init_app():
     button_emp_list = customtkinter.CTkButton(frame, text="Add New Employee", command=button_emp_list_event)         # Duplicate: Add New Employee
     #button_emp_list.place(x=160, y=146, width=140, height=28)                                                       # Place button
 
-    #tree_init(frame)                                                                                                 # Initialize the Treeview
+    tree_init(frame)                                                                                                 # Initialize the Treeview
 
     frame.mainloop()                                                                                                 # Start app main loop
 
@@ -49,4 +49,5 @@ def button_add_emp_event():                                                     
     print("Add Employee")                                                                                          # Placeholder print
 
 # FUNCTION CALLERS
-init_app()                                                                                                         # Call init_app function
+                                                                                                          # Call init_app function
+init_app()
