@@ -1,55 +1,45 @@
-import os
+# src/main.py
 import cv2
+from PIL import Image, ImageTk
+import os
+
 from utils.loadings import load_models, load_embeddings
 from utils.face_func import refresh_embeddings, process_frame
 
-# Director principal
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-# Director imagini
-IMAGES_DIR = os.path.join(BASE_DIR, "data", "images")
+def main(video_label):
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    IMAGES_DIR = os.path.join(BASE_DIR, "data", "images")
 
-# Initializare modele
-face_detector, face_recognizer = load_models()
+    face_detector, face_recognizer = load_models()
+    refresh_embeddings(IMAGES_DIR, face_detector, face_recognizer)
+    embeddings = load_embeddings()
 
-# Refresh file embedding-uri
-refresh_embeddings(IMAGES_DIR, face_detector, face_recognizer)
+    capture = cv2.VideoCapture(1)
+    if not capture.isOpened():
+        print("EROARE CAMERA")
+        return
 
-# Initializare dictitionar embeddinng-uri
-embeddings = load_embeddings()
+    frame_count = 0
 
-capture = cv2.VideoCapture(1)
+    def update_frame():
+        nonlocal frame_count
+        ret, frame = capture.read()
+        if not ret:
+            return
 
-if not capture.isOpened:
-    print("EROARE CAMERA")
-    exit(0)
-    
-frame_count = 0
+        frame = cv2.resize(frame, (320, 240))
+        frame_count += 1
 
-# Bucla infinita pentru inregistrare video
-while True:
-    result, frame = capture.read()
-    if result is False:
-        cv2.waitKey(0)
-        break
-    
-    frame = cv2.resize(frame, (0, 0), fx=0.4, fy=0.4)
-    
-    frame_count += 1
-    # Setare numar de frame-uri la care se face 1 detection
-    if frame_count % 5 == 0:
-        # Apelare functie ce proceseaza frame-ul(detectie+match+actiune)
-        frame = process_frame(frame, face_detector, face_recognizer, embeddings)
-    
-    cv2.imshow("Face Recognition", frame)
-    
-    # Conditie de iesire
-    key = cv2.waitKey(1)
-    if key == ord('q'):
-        break
-    
-# Preventie leakage resurse
-capture.release()
-cv2.destroyAllWindows()
+        if frame_count % 5 == 0:
+            frame = process_frame(frame, face_detector, face_recognizer, embeddings)
 
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        img = Image.fromarray(frame)
+        imgtk = ImageTk.PhotoImage(img)
 
+        video_label.configure(image=imgtk)
+        video_label.image = imgtk
 
+        video_label.after(10, update_frame)
+
+    update_frame()
