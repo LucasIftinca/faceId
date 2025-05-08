@@ -40,13 +40,13 @@ def import_images(data_folder):
         print("Final file path = ", target_path)                                                 # DEBUG: Print the destination path for verification
         
         try: 
-            shutil.move(file_path, target_path)                                                  # Move file to data folder (for embeddings)
-        
+            shutil.copy(file_path, target_path)                                                  # Move file to data folder (for embeddings)
+            return file_name
         except Exception as e:
             messagebox.showinfo("Error", f"Error encountered : {e}")                             # Show error message if file move fails
     else:
         messagebox.showinfo("Error", "Wrong File Format")                                        # Show error message for invalid file type
-
+    
 
 def connection_to_raspi():
     HOST = 'raspberrypi.local'  # or the static IP like '192.168.137.2'
@@ -58,6 +58,11 @@ def connection_to_raspi():
         data = s.recv(1024)
 
     print('Received from Pi:', data.decode())
+
+
+# EXCHANGING FRAMES FROM ONE TO ANOTHER | (CTK FRAME AS PARAMETER)
+def show_frame(frame):
+    frame.tkraise()
 
 
 # # server_pi.py

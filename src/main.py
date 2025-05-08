@@ -27,7 +27,7 @@ def main(video_label):
         if not ret:
             return
 
-        frame = cv2.resize(frame, (320, 240))
+        frame = cv2.resize(frame, (300, 220))
         frame_count += 1
 
         if frame_count % 5 == 0:
