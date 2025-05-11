@@ -14,6 +14,9 @@ def main(video_label):
     refresh_embeddings(IMAGES_DIR, face_detector, face_recognizer)
     embeddings = load_embeddings()
 
+    # Setare url pentru flux video de la camera IP
+    url="rtsp://admin:adminadmin1@192.168.1.108:554/cam/realmonitor?channel=1&subtype=0"
+
     capture = cv2.VideoCapture(1)
     if not capture.isOpened():
         print("EROARE CAMERA")

@@ -1,7 +1,7 @@
 import os
 import sys
 import customtkinter
-
+from tkcalendar import Calendar
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
 
 from utils_gui import *
@@ -68,10 +68,9 @@ def reg_frame_add_emp():
     print(filename)
     text_filename = filename
    
-        
-    
 def reg_frame_checkbox():
-    reg_frame.destroy()
+    #reg_frame.destroy()
+    show_frame("main")
 
 ####################
 # BUILD MAIN FRAME #
@@ -107,8 +106,8 @@ def build_reg_frame():
     #button_back = customtkinter.CTkButton(reg_frame, text="Back", command=lambda: show_frame("main"))
     #button_back.place(x=150, y=160)
     
-    button_add = customtkinter.CTkButton(reg_frame, text="Select Photo", command=reg_frame_add_emp, width=140, height=28)
-    button_add.place(x=20, y=60)
+    button_select_photo = customtkinter.CTkButton(reg_frame, text="Select Photo", command=reg_frame_add_emp, width=140, height=28)
+    button_select_photo.place(x=20, y=60)
     
     image_txtbox = customtkinter.CTkTextbox(reg_frame, width= 140, height= 28)
     image_txtbox.place(x = 20, y = 100)
@@ -127,6 +126,13 @@ def build_reg_frame():
     checkbox = customtkinter.CTkCheckBox(reg_frame, text="Unlimited Period", command=reg_frame_checkbox,
                                      variable=check_var, onvalue="on", offvalue="off")
     checkbox.place(x=20, y = 220)
+    
+    button_add = customtkinter.CTkButton(reg_frame, text="Add Employee", command=button_add_event, width=140, height=28)
+    button_add.place(x=20, y=260)
+    
+    calendar = Calendar(reg_frame, selectmode = "day")
+    calendar.place(x = 200, y = 60)
+    
 
 ####################
 # INITIALIZATION   #
