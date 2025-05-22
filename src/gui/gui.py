@@ -1,11 +1,15 @@
 import os
 import sys
+
 import customtkinter
 from tkcalendar import Calendar
+from datetime import date, timedelta
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
 
-from utils_gui import *
-from main import main
+from .utils_gui import *
+from src.face_recognition_utils.face_detection import face_detection
+
 
 ###########################
 # PATHS & GLOBAL VARIABLES #
@@ -14,12 +18,20 @@ from main import main
 data_folder = os.path.join("data", "images")  # Adjusted path to look more standard
 video_label = None
 image_path_txtbox = None
+password = 'parola'
+user = "admin"
 
 ####################
 # SYSTEM SETTINGS  #
 ####################
 customtkinter.set_appearance_mode("Dark")
 customtkinter.set_default_color_theme("blue")
+
+def build_admin_frame():
+    password_txtbox = customtkinter.CTkTextbox(reg_frame, width= 140, height= 28)
+    password_txtbox.place(x = 20, y = 100)
+    password_txtbox.insert("1.0", "Imagine")
+
 
 ####################
 # APP AND CONTAINER #
@@ -46,9 +58,9 @@ for frame in (main_frame, reg_frame):
 frames["main"] = main_frame
 frames["register"] = reg_frame
 
-####################
-# FUNCTION HELPERS #
-####################
+#######################
+# MAIN FRAME FUNCTIONS#
+#######################
 def show_frame(name):
     frame = frames[name]
     frame.tkraise()
@@ -61,16 +73,8 @@ def button_delete_event():
 
 def button_reset_event():
     print("Reset button clicked")  # Placeholder
-    
-def reg_frame_add_emp():
-    global image_path_txtbox
-    filename = import_images(data_folder)
-    print(filename)
-    text_filename = filename
-   
-def reg_frame_checkbox():
-    #reg_frame.destroy()
-    show_frame("main")
+
+
 
 ####################
 # BUILD MAIN FRAME #
@@ -91,7 +95,21 @@ def build_main_frame():
     video_label.place(x=180, y=20)
 
     # Run your main face recognition function (assumes it updates video_label)
-    main(video_label)
+    face_detection(video_label)
+
+
+#######################
+# REG FRAME FUNCTIONS#
+#######################
+def reg_frame_add_emp():
+    global image_path_txtbox
+    filename = import_images(data_folder)
+    print(filename)
+    text_filename = filename
+   
+def reg_frame_checkbox():
+    show_frame("main")
+
 
 ########################
 # BUILD REGISTER FRAME #
@@ -111,16 +129,22 @@ def build_reg_frame():
     
     image_txtbox = customtkinter.CTkTextbox(reg_frame, width= 140, height= 28)
     image_txtbox.place(x = 20, y = 100)
+    image_txtbox.insert("1.0", "Imagine")
     
     name_txtbox = customtkinter.CTkTextbox(reg_frame, width= 140, height= 28)
     name_txtbox.place(x = 20, y = 140)
+    name_txtbox.insert("1.0", "Nume")
     
-    image_txtbox = customtkinter.CTkTextbox(reg_frame, width= 60, height= 28)
-    image_txtbox.place(x = 100, y = 180)
+    datestart_txtbox = customtkinter.CTkTextbox(reg_frame, width= 60, height= 28)
+    datestart_txtbox.place(x = 100, y = 180)
+    today = date.today() 
+    datestart_txtbox.insert("1.0", today.strftime("%d/%m"))
     
-    image_txtbox = customtkinter.CTkTextbox(reg_frame, width= 60, height= 28)
-    image_txtbox.place(x = 20, y = 180)
-    image_txtbox.configure(state="disabled")
+    datestop_txtbox = customtkinter.CTkTextbox(reg_frame, width= 60, height= 28)
+    datestop_txtbox.place(x = 20, y = 180)
+    tommorow = today + timedelta(days=1)
+    datestop_txtbox.insert("1.0", tommorow.strftime("%d/%m"))
+    
     #image_txtbox.insert("0.0",text_filename)
     
     checkbox = customtkinter.CTkCheckBox(reg_frame, text="Unlimited Period", command=reg_frame_checkbox,
@@ -132,13 +156,15 @@ def build_reg_frame():
     
     calendar = Calendar(reg_frame, selectmode = "day")
     calendar.place(x = 200, y = 60)
+    datestop_txtbox.insert("1.0", calendar.get_date())
     
 
 ####################
 # INITIALIZATION   #
 ####################
-build_main_frame()
-build_reg_frame()
-
-show_frame("main")
-main_app.mainloop()
+def launch_app():
+    build_main_frame()
+    build_reg_frame()
+    show_frame("main")
+    main_app.mainloop()
+    

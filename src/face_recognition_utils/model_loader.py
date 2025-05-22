@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 
+
 #Functie incarcare modele preantrenate detectie si recunoastere faciala
 def load_models():
     face_detector = cv2.FaceDetectorYN_create(r"src/models/face_detection_yunet_2023mar.onnx", "", (0,0))
@@ -18,4 +19,3 @@ def load_embeddings():
         embeddings = {}
         
     return embeddings
-

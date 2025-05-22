@@ -2,13 +2,19 @@
 import cv2
 from PIL import Image, ImageTk
 import os
+from customtkinter import CTkImage
 
-from utils.loadings import load_models, load_embeddings
-from utils.face_func import refresh_embeddings, process_frame
 
-def main(video_label):
-    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# main.py
+from src.face_recognition_utils.model_loader import load_models, load_embeddings
+from src.face_recognition_utils.face_recognition import refresh_embeddings, process_frame
+
+
+
+def face_detection(video_label):
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     IMAGES_DIR = os.path.join(BASE_DIR, "data", "images")
+
 
     face_detector, face_recognizer = load_models()
     refresh_embeddings(IMAGES_DIR, face_detector, face_recognizer)
@@ -17,7 +23,7 @@ def main(video_label):
     # Setare url pentru flux video de la camera IP
     url="rtsp://admin:adminadmin1@192.168.1.108:554/cam/realmonitor?channel=1&subtype=0"
 
-    capture = cv2.VideoCapture(1)
+    capture = cv2.VideoCapture(3)
     if not capture.isOpened():
         print("EROARE CAMERA")
         return
@@ -38,10 +44,10 @@ def main(video_label):
 
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         img = Image.fromarray(frame)
-        imgtk = ImageTk.PhotoImage(img)
+        ctk_img = CTkImage(light_image=img, dark_image=img)
 
-        video_label.configure(image=imgtk)
-        video_label.image = imgtk
+        video_label.configure(image=ctk_img)
+        video_label.image = ctk_img
 
         video_label.after(10, update_frame)
 
