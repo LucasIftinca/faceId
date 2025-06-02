@@ -8,7 +8,8 @@ from datetime import date, timedelta, datetime
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
 
 from .utils_gui import *
-from src.face_recognition_utils.face_detection import face_detection
+from src.face_recognition_utils.face_detection import face_detection, IMAGES_DIR, face_recognizer, face_detector
+from src.face_recognition_utils.face_recognition import refresh_embeddings_2
 
 
 data_folder = r"data/images"
@@ -93,41 +94,70 @@ class App(ctk.CTk):
 #==================================================================================================================================#    
     def build_register_frame(self):
         frame = self.frames["register"]
-        self.check_var = ctk.StringVar(value="off")
+        self.check_var = ctk.StringVar(value="False")
 
         #FRAME VARIABLES#
         today = date.today()
         tomorrow = today + timedelta(days=1)
 
-        #FRAME WIDGETS#
-        self.image_txtbox = ctk.CTkTextbox(frame, width=140, height=28)
-        self.image_txtbox.place(x=20, y=100)
-        self.image_txtbox.insert("1.0", "Imagine")
+ #FRAME VARIABLES#
+        today = date.today()
+        tomorrow = today + timedelta(days=1)
+        
+        button_select_photo = ctk.CTkButton(frame, text="Select Photo", command=self.get_filepath, width=140, height=28)
+        button_select_photo.place(x=20, y=15)
 
-        self.name_txtbox = ctk.CTkTextbox(frame, width=140, height=28)
-        self.name_txtbox.place(x=20, y=140)
-        self.name_txtbox.insert("1.0", "Nume")
+        # Name Label + Entry
+        self.name_label = ctk.CTkLabel(frame, text="Name:")
+        self.name_label.place(x=20, y=45)
 
-        self.datestart_txtbox = ctk.CTkTextbox(frame, width=60, height=28)
-        self.datestart_txtbox.place(x=20, y=180)
-        self.datestart_txtbox.insert("1.0", today.strftime("%d/%m"))
+        self.name_txtbox = ctk.CTkEntry(frame, width=140, height=28)
+        self.name_txtbox.place(x=20, y=75)
+
+        # Surname Label + Entry
+        self.surname_label = ctk.CTkLabel(frame, text="Surname:")
+        self.surname_label.place(x=20, y=105)
+
+        self.surname_txtbox = ctk.CTkEntry(frame, width=140, height=28)
+        self.surname_txtbox.place(x=20, y=135)
+
+        # Start Date Label + Entry
+        self.start_label = ctk.CTkLabel(frame, text="Start Date:")
+        self.start_label.place(x=20, y=165)
+
+        self.datestart_txtbox = ctk.CTkTextbox(frame, width=80, height=28)
+        self.datestart_txtbox.place(x=20, y=195)
+        self.datestart_txtbox.insert("1.0", today.strftime("%d/%m/%y"))
         self.datestart_txtbox.bind("<Button-1>", self.show_calendar_inline_start)
 
-        self.datestop_txtbox = ctk.CTkTextbox(frame, width=60, height=28)
-        self.datestop_txtbox.place(x=100, y=180)
-        self.datestop_txtbox.insert("1.0", tomorrow.strftime("%d/%m"))
+        # Stop Date Label + Entry
+        self.stop_label = ctk.CTkLabel(frame, text="Stop Date:")
+        self.stop_label.place(x=100, y=165)
+
+        self.datestop_txtbox = ctk.CTkTextbox(frame, width=80, height=28)
+        self.datestop_txtbox.place(x=100, y=195)
+        self.datestop_txtbox.insert("1.0", tomorrow.strftime("%d/%m/%y"))
         self.datestop_txtbox.bind("<Button-1>", self.show_calendar_inline_stop)
 
-        self.checkbox = ctk.CTkCheckBox(frame, text="Unlimited Period", command=self.reg_frame_checkbox,
-                                        variable=self.check_var, onvalue="on", offvalue="off")
-        self.checkbox.place(x=20, y=220)
+        # Unlimited Period Checkbox
+        self.unlimited = ctk.CTkCheckBox(
+            frame,
+            text="Unlimited Period",
+            variable=self.check_var,
+            onvalue="True",
+            offvalue="False"
+        )
+        self.unlimited.place(x=20, y=230)
+
 
         #BUTTONS#
-        button_add = ctk.CTkButton(frame, text="Add Employee", command=self.reg_frame_button_add_event, width=140, height=28)
-        button_add.place(x=20, y=260)
+        button_add = ctk.CTkButton(frame, text="Add Employee", command=self.get_emp_info, width=140, height=28)
+        button_add.place(x=20, y=265)
+        
+        button_add = ctk.CTkButton(frame, text="Add Employee", command=self.return_to_main_frame, width=140, height=28)
+        button_add.place(x=180, y=265)
+        
 
-        button_select_photo = ctk.CTkButton(frame, text="Select Photo", command=self.reg_frame_select_event, width=140, height=28)
-        button_select_photo.place(x=20, y=60)
  #==================================================================================================================================#           
 
 ###################
@@ -136,7 +166,7 @@ class App(ctk.CTk):
 #==================================================================================================================================#      
     def build_delete_frame(self):
         frame = self.frames["delete"]
-        self.check_var = ctk.StringVar(value="off")
+        #self.check_var = ctk.StringVar(value="off")
 
         button_delete = ctk.CTkButton(frame, text="Delete", command=self.delete_emp, width=140, height=28)
         button_delete.place(x=30, y=270)
@@ -204,7 +234,7 @@ class App(ctk.CTk):
     def use_selected_date_start(self):
         raw_date = self.calendar.get_date()  # e.g., '5/7/25'
         date_selected = datetime.strptime(raw_date, "%m/%d/%y")
-        formatted_date = date_selected.strftime("%d/%m")
+        formatted_date = date_selected.strftime("%d/%m/%y")
         self.datestart_txtbox.delete("1.0", "end")
         self.datestart_txtbox.insert("1.0", formatted_date)
         self.calendar.destroy()
@@ -213,7 +243,7 @@ class App(ctk.CTk):
     def use_selected_date_stop(self):
         raw_date = self.calendar.get_date()  # e.g., '5/7/25'
         date_selected = datetime.strptime(raw_date, "%m/%d/%y")
-        formatted_date = date_selected.strftime("%d/%m")
+        formatted_date = date_selected.strftime("%d/%m/%y")
         self.datestop_txtbox.delete("1.0", "end")
         self.datestop_txtbox.insert("1.0", formatted_date)
         self.calendar.destroy()
@@ -247,7 +277,8 @@ class App(ctk.CTk):
     def main_frame_button_delete_event(self):
         self.show_frame("delete")
 
-    # def main_frame_button_reset_event(self):
+
+    # def main_frame_bsutton_reset_event(self):
     #     reset_app()
 
     def reset_app(self):
@@ -255,12 +286,10 @@ class App(ctk.CTk):
 
     
 
-    def reg_frame_button_add_event(self):
-        ##import_images(data_folder, name, date_start, date_stop, unlimited)
-        print("NEED DICT IMPLEMENTATION")
-
-    def reg_frame_select_event(self):
-        import_images(data_folder)  # ADD PARAMETERS LATER -> name, date_start, date_stop, unlimited)
+    def get_filepath(self):
+        self.selected_file_path = askopenfilename()
+ 
+        
 
     def reg_frame_checkbox(self):
         self.show_frame("main")
@@ -277,6 +306,42 @@ class App(ctk.CTk):
 
     def delete_emp(self):
         del_emp()
+        
+    def get_emp_info(self):
+        name = self.name_txtbox.get()
+        surname = self.surname_txtbox.get()
+
+        print(self.check_var.get())
+
+        if self.check_var.get() == "True":  
+            start_date_obj = datetime.today()
+            stop_date_obj = datetime.strptime("01/01/3000", "%d/%m/%Y")  # 4-digit year
+            days_left = -1
+        else:
+            try:
+                # Expecting input as dd/mm/yy (2-digit year)
+                start_str = self.datestart_txtbox.get("1.0", "end").strip()
+                stop_str = self.datestop_txtbox.get("1.0", "end").strip()
+
+                start_date_obj = datetime.strptime(start_str, "%d/%m/%y")
+                stop_date_obj = datetime.strptime(stop_str, "%d/%m/%y")
+                days_left = (stop_date_obj - start_date_obj).days
+            except ValueError:
+                print("Invalid date format. Please use dd/mm/yy.")
+                return  # stop execution if invalid input
+
+        start_date = start_date_obj.strftime("%d/%m/%y")
+        stop_date = stop_date_obj.strftime("%d/%m/%y")
+
+        import_images(name, surname, data_folder, self.selected_file_path)  # ADD PARAMETERS LATER -> name, date_start, date_stop, unlimited)
+        
+        info = [name, surname, start_date, stop_date, days_left]
+        print(info)
+        
+        refresh_embeddings_2(IMAGES_DIR, info, face_detector, face_recognizer)
+        self.show_frame("main")
+
+
 #==================================================================================================================================#
 
 

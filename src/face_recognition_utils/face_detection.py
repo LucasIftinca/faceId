@@ -9,7 +9,10 @@ from customtkinter import CTkImage
 from src.face_recognition_utils.model_loader import load_models, load_embeddings
 from src.face_recognition_utils.face_recognition import refresh_embeddings, process_frame
 
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+IMAGES_DIR = os.path.join(BASE_DIR, "data", "images")
 
+face_detector, face_recognizer = load_models()
 
 def face_detection(video_label):
     BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -55,4 +58,3 @@ def face_detection(video_label):
         video_label.after(10, update_frame)
 
     update_frame()
-

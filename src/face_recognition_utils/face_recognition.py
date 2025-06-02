@@ -93,4 +93,25 @@ def refresh_embeddings(images_directory,face_detector, face_recognizer):
     # Salvare sub forma de fisier .npy (.npy permite serializarea obiectelor)
     np.save(r"data/embeddings.npy", dictionary)
 
-
+def refresh_embeddings_2(images_directory,emp_data,face_detector, face_recognizer):
+    #Datele sunt stocate in dictionar
+    dictionary = {}
+    # Parcurgere director imagini
+    for file in os.listdir(images_directory):
+        # Obtinere path imagine
+        file_path = os.path.join(images_directory,file)
+        # Citire imagine
+        image = cv2.imread(file_path)
+        # Apel functie detectie cu specificare de file(in caz de eroare este afisata imaginea corupta)
+        feature, face = recognize_face(image, face_detector, face_recognizer, file)
+        # Salt spre urmatoarea iteratie daca nu este identificata o fata
+        if face is None:
+            continue
+        # Trimming la path pentru obtinerea numelui ( /images/popescu.jpg -> popescu)
+        #user = os.path.splitext(os.path.basename(file))[0]
+        user = emp_data[0] + " " + emp_data [1]
+        # Adaugare in dictionar date obtinute
+        dictionary[user] = feature
+        
+    # Salvare sub forma de fisier .npy (.npy permite serializarea obiectelor)
+    np.save(r"data/embeddings.npy", dictionary)
