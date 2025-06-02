@@ -1,9 +1,9 @@
 import os
 import sys
 
-import customtkinter
+import customtkinter as ctk
 from tkcalendar import Calendar
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
 
@@ -11,160 +11,279 @@ from .utils_gui import *
 from src.face_recognition_utils.face_detection import face_detection
 
 
-###########################
-# PATHS & GLOBAL VARIABLES #
-###########################
+data_folder = r"data/images"
 
-data_folder = os.path.join("data", "images")  # Adjusted path to look more standard
-video_label = None
-image_path_txtbox = None
-password = 'parola'
-user = "admin"
+###########
+####APP####
+###########  
+#==================================================================================================================================#   
+class App(ctk.CTk):
+    def __init__(self):
+        super().__init__()
 
-####################
-# SYSTEM SETTINGS  #
-####################
-customtkinter.set_appearance_mode("Dark")
-customtkinter.set_default_color_theme("blue")
+        self.title("Face Recognition")
+        self.geometry("460x320")
+        self.resizable(False, False)
 
-def build_admin_frame():
-    password_txtbox = customtkinter.CTkTextbox(reg_frame, width= 140, height= 28)
-    password_txtbox.place(x = 20, y = 100)
-    password_txtbox.insert("1.0", "Imagine")
+        ctk.set_appearance_mode("dark")
+        ctk.set_default_color_theme("blue")
 
+        self.calendar = None
+        self.select_date_button = None
 
-####################
-# APP AND CONTAINER #
-####################
-main_app = customtkinter.CTk()
-main_app.geometry("460x320")
-main_app.title("Face Recognition")
-main_app.resizable(False, False)
+        # Setup main container
+        self.container = ctk.CTkFrame(self)
+        self.container.pack(fill="both", expand=True)
+        self.container.grid_rowconfigure(0, weight=1)
+        self.container.grid_columnconfigure(0, weight=1)
 
-container = customtkinter.CTkFrame(main_app)
-container.pack(fill = "both", expand=True)
+        # Initialize frames
+        self.frames = {}
+        self.frames["main"] = ctk.CTkFrame(self.container)
+        self.frames["register"] = ctk.CTkFrame(self.container)
+        self.frames["delete"] = ctk.CTkFrame(self.container)
+        self.frames["login"] = ctk.CTkFrame(self.container)
 
-container.grid_rowconfigure(0, weight=1)
-container.grid_columnconfigure(0, weight=1)
+        for frame in self.frames.values():
+            frame.grid(row=0, column=0, sticky="nsew")
 
-frames = {}
+        # Build the frames
+        self.build_main_frame()
+        self.build_register_frame()
+        self.build_delete_frame()
+        self.build_login_frame()
 
-main_frame = customtkinter.CTkFrame(container)
-reg_frame = customtkinter.CTkFrame(container)
+        # Show main frame
+        self.show_frame("main")
+#==================================================================================================================================#    
 
-for frame in (main_frame, reg_frame):
-    frame.grid(row=0, column=0, sticky="nsew")
+###################
+####MAIIN FRAME####
+###################   
+#==================================================================================================================================#    
+    def build_main_frame(self):
+        frame = self.frames["main"]
 
-frames["main"] = main_frame
-frames["register"] = reg_frame
+        #FRAME VARIBLES#
+        # frame_name = "main"
 
-#######################
-# MAIN FRAME FUNCTIONS#
-#######################
-def show_frame(name):
-    frame = frames[name]
-    frame.tkraise()
+        #FRAME WIDGETS#
+        button_add = ctk.CTkButton(frame, text="Add", command=lambda: self.login_frame_builder("register"), width=140, height=28)
+        button_add.place(x=20, y=100)
 
-def button_add_event():
-    show_frame("register")
+        # button_add = ctk.CTkButton(frame, text="Add", command=self.main_frame_button_add_event, width=140, height=28)
+        # button_add.place(x=20, y=100)
 
-def button_delete_event():
-    print("Delete button clicked")  # Placeholder
+        button_delete = ctk.CTkButton(frame, text="Delete", command=lambda : self.login_frame_builder("delete"), width=140, height=28)
+        button_delete.place(x=20, y=140)
 
-def button_reset_event():
-    print("Reset button clicked")  # Placeholder
+        button_reset = ctk.CTkButton(frame, text="Reset", command=self.reset_app, width=140, height=28)
+        button_reset.place(x=20, y=180)
 
+        self.video_label = ctk.CTkLabel(frame, text="", width=300, height=240)
+        self.video_label.place(x=180, y=20)
 
+        #FUNCTIONS#
+        face_detection(self.video_label)
+#==================================================================================================================================#    
 
-####################
-# BUILD MAIN FRAME #
-####################
-def build_main_frame():
-    global video_label
+###################
+###REGISTER FRAME##
+###################   
+#==================================================================================================================================#    
+    def build_register_frame(self):
+        frame = self.frames["register"]
+        self.check_var = ctk.StringVar(value="off")
 
-    button_add = customtkinter.CTkButton(main_frame, text="Add", command=button_add_event, width=140, height=28)
-    button_add.place(x=20, y=100)
+        #FRAME VARIABLES#
+        today = date.today()
+        tomorrow = today + timedelta(days=1)
 
-    button_reset = customtkinter.CTkButton(main_frame, text="Reset", command=button_reset_event, width=140, height=28)
-    button_reset.place(x=20, y=140)
+        #FRAME WIDGETS#
+        self.image_txtbox = ctk.CTkTextbox(frame, width=140, height=28)
+        self.image_txtbox.place(x=20, y=100)
+        self.image_txtbox.insert("1.0", "Imagine")
 
-    button_delete = customtkinter.CTkButton(main_frame, text="Delete", command=button_delete_event, width=140, height=28)
-    button_delete.place(x=20, y=180)
+        self.name_txtbox = ctk.CTkTextbox(frame, width=140, height=28)
+        self.name_txtbox.place(x=20, y=140)
+        self.name_txtbox.insert("1.0", "Nume")
 
-    video_label = customtkinter.CTkLabel(main_frame, text="", width=180, height=180)
-    video_label.place(x=180, y=20)
+        self.datestart_txtbox = ctk.CTkTextbox(frame, width=60, height=28)
+        self.datestart_txtbox.place(x=20, y=180)
+        self.datestart_txtbox.insert("1.0", today.strftime("%d/%m"))
+        self.datestart_txtbox.bind("<Button-1>", self.show_calendar_inline_start)
 
-    # Run your main face recognition function (assumes it updates video_label)
-    face_detection(video_label)
+        self.datestop_txtbox = ctk.CTkTextbox(frame, width=60, height=28)
+        self.datestop_txtbox.place(x=100, y=180)
+        self.datestop_txtbox.insert("1.0", tomorrow.strftime("%d/%m"))
+        self.datestop_txtbox.bind("<Button-1>", self.show_calendar_inline_stop)
 
+        self.checkbox = ctk.CTkCheckBox(frame, text="Unlimited Period", command=self.reg_frame_checkbox,
+                                        variable=self.check_var, onvalue="on", offvalue="off")
+        self.checkbox.place(x=20, y=220)
 
-#######################
-# REG FRAME FUNCTIONS#
-#######################
-def reg_frame_add_emp():
-    global image_path_txtbox
-    filename = import_images(data_folder)
-    print(filename)
-    text_filename = filename
-   
-def reg_frame_checkbox():
-    show_frame("main")
+        #BUTTONS#
+        button_add = ctk.CTkButton(frame, text="Add Employee", command=self.reg_frame_button_add_event, width=140, height=28)
+        button_add.place(x=20, y=260)
 
+        button_select_photo = ctk.CTkButton(frame, text="Select Photo", command=self.reg_frame_select_event, width=140, height=28)
+        button_select_photo.place(x=20, y=60)
+ #==================================================================================================================================#           
 
-########################
-# BUILD REGISTER FRAME #
-########################
-def build_reg_frame():
+###################
+####DELETE FRAME###
+###################   
+#==================================================================================================================================#      
+    def build_delete_frame(self):
+        frame = self.frames["delete"]
+        self.check_var = ctk.StringVar(value="off")
+
+        button_delete = ctk.CTkButton(frame, text="Delete", command=self.delete_emp, width=140, height=28)
+        button_delete.place(x=30, y=270)
+
+        button_back = ctk.CTkButton(frame, text="Back", command=self.return_to_main_frame, width=140, height=28)
+        button_back.place(x = 190, y = 270)
+        tree_init(frame)
+
+###################
+####LOGIN FRAME####
+###################   
+#==================================================================================================================================#    
+    def build_login_frame(self):
+        frame = self.frames["login"]
+
+        self.username_label = ctk.CTkLabel(frame, text="User:")
+        self.username_label.pack(pady=(20, 5))
+        self.username_entry = ctk.CTkEntry(frame, placeholder_text="Enter username")
+        self.username_entry.pack()
+
+        self.password_label = ctk.CTkLabel(frame, text="Password:")
+        self.password_label.pack(pady=(10, 5))
+        self.password_entry = ctk.CTkEntry(frame, placeholder_text="Enter password", show="*")
+        self.password_entry.pack()
+
+        self.error_label = ctk.CTkLabel(frame, text="Login Failed! Try again!", text_color="red")
+
+        self.verify_button = ctk.CTkButton(frame, text="Verify", command=self.get_credentials)
+        self.verify_button.pack(pady=20)
+        
+    def login_frame_builder(self, name):
+        self.post_login_target = name
+        self.username_entry.delete(0, 'end')
+        self.password_entry.delete(0, 'end')
+        self.error_label.pack_forget()
+        self.show_frame("login")
+
+    def get_credentials(self):
+        user = self.username_entry.get()
+        password = self.password_entry.get()
+
+        if user == "1" and password == "1":
+            self.show_frame(self.post_login_target)
+        else:
+            self.error_label.pack(pady=(5, 0))
+            self.error_label.after(2000, self.error_label.pack_forget)
+################
+####CALENDAR####
+################ 
+#==================================================================================================================================#
+    def show_calendar_inline_start(self, event=None):
+        frame = self.frames["register"]
+
+        if self.calendar and self.calendar.winfo_exists():
+            self.calendar.destroy()
+        if self.select_date_button and self.select_date_button.winfo_exists():
+            self.select_date_button.destroy()
+
+        self.calendar = Calendar(frame, selectmode="day")
+        self.calendar.place(x=200, y=60)
+
+        self.select_date_button = ctk.CTkButton(frame, text="Use Selected Date", command=self.use_selected_date_start)
+        self.select_date_button.place(x=200, y=230)
+
+    def use_selected_date_start(self):
+        raw_date = self.calendar.get_date()  # e.g., '5/7/25'
+        date_selected = datetime.strptime(raw_date, "%m/%d/%y")
+        formatted_date = date_selected.strftime("%d/%m")
+        self.datestart_txtbox.delete("1.0", "end")
+        self.datestart_txtbox.insert("1.0", formatted_date)
+        self.calendar.destroy()
+        self.select_date_button.destroy()
+
+    def use_selected_date_stop(self):
+        raw_date = self.calendar.get_date()  # e.g., '5/7/25'
+        date_selected = datetime.strptime(raw_date, "%m/%d/%y")
+        formatted_date = date_selected.strftime("%d/%m")
+        self.datestop_txtbox.delete("1.0", "end")
+        self.datestop_txtbox.insert("1.0", formatted_date)
+        self.calendar.destroy()
+        self.select_date_button.destroy()
+
+    def show_calendar_inline_stop(self, event=None):
+        frame = self.frames["register"]
+
+        if self.calendar and self.calendar.winfo_exists():
+            self.calendar.destroy()
+        if self.select_date_button and self.select_date_button.winfo_exists():
+            self.select_date_button.destroy()
+
+        self.calendar = Calendar(frame, selectmode="day")
+        self.calendar.place(x=200, y=60)
+
+        self.select_date_button = ctk.CTkButton(frame, text="Use Selected Date", command=self.use_selected_date_stop)
+        self.select_date_button.place(x=200, y=230)
+#==================================================================================================================================#
+
+################
+####FUNCTIONS###
+################      
+#==================================================================================================================================#   
+    def return_to_main_frame(self):
+        self.show_frame("main")
+
+    def main_frame_button_add_event(self):
+        self.show_frame("register")
+
+    def main_frame_button_delete_event(self):
+        self.show_frame("delete")
+
+    # def main_frame_button_reset_event(self):
+    #     reset_app()
+
+    def reset_app(self):
+        print("RESET")
+
     
-    check_var = customtkinter.StringVar(value="off")
 
-    #label = customtkinter.CTkLabel(reg_frame, text="Register Page")
-    #label.place(x=150, y=120)
+    def reg_frame_button_add_event(self):
+        ##import_images(data_folder, name, date_start, date_stop, unlimited)
+        print("NEED DICT IMPLEMENTATION")
 
-    #button_back = customtkinter.CTkButton(reg_frame, text="Back", command=lambda: show_frame("main"))
-    #button_back.place(x=150, y=160)
-    
-    button_select_photo = customtkinter.CTkButton(reg_frame, text="Select Photo", command=reg_frame_add_emp, width=140, height=28)
-    button_select_photo.place(x=20, y=60)
-    
-    image_txtbox = customtkinter.CTkTextbox(reg_frame, width= 140, height= 28)
-    image_txtbox.place(x = 20, y = 100)
-    image_txtbox.insert("1.0", "Imagine")
-    
-    name_txtbox = customtkinter.CTkTextbox(reg_frame, width= 140, height= 28)
-    name_txtbox.place(x = 20, y = 140)
-    name_txtbox.insert("1.0", "Nume")
-    
-    datestart_txtbox = customtkinter.CTkTextbox(reg_frame, width= 60, height= 28)
-    datestart_txtbox.place(x = 100, y = 180)
-    today = date.today() 
-    datestart_txtbox.insert("1.0", today.strftime("%d/%m"))
-    
-    datestop_txtbox = customtkinter.CTkTextbox(reg_frame, width= 60, height= 28)
-    datestop_txtbox.place(x = 20, y = 180)
-    tommorow = today + timedelta(days=1)
-    datestop_txtbox.insert("1.0", tommorow.strftime("%d/%m"))
-    
-    #image_txtbox.insert("0.0",text_filename)
-    
-    checkbox = customtkinter.CTkCheckBox(reg_frame, text="Unlimited Period", command=reg_frame_checkbox,
-                                     variable=check_var, onvalue="on", offvalue="off")
-    checkbox.place(x=20, y = 220)
-    
-    button_add = customtkinter.CTkButton(reg_frame, text="Add Employee", command=button_add_event, width=140, height=28)
-    button_add.place(x=20, y=260)
-    
-    calendar = Calendar(reg_frame, selectmode = "day")
-    calendar.place(x = 200, y = 60)
-    datestop_txtbox.insert("1.0", calendar.get_date())
-    
+    def reg_frame_select_event(self):
+        import_images(data_folder)  # ADD PARAMETERS LATER -> name, date_start, date_stop, unlimited)
 
-####################
-# INITIALIZATION   #
-####################
-def launch_app():
-    build_main_frame()
-    build_reg_frame()
-    show_frame("main")
-    main_app.mainloop()
-    
+    def reg_frame_checkbox(self):
+        self.show_frame("main")
+
+    def button_delete_event(self):
+        self.show_frame("delete")
+
+    def reg_frame_login_frame(self):
+        self.show_frame("login")
+
+    def show_frame(self, name):
+        frame = self.frames[name]
+        frame.tkraise()
+
+    def delete_emp(self):
+        del_emp()
+#==================================================================================================================================#
+
+
+################
+####INNIT APP###
+################  
+#==================================================================================================================================#
+app = App()
+app.mainloop()
+#==================================================================================================================================#

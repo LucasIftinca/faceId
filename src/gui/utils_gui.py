@@ -28,7 +28,7 @@ def tree_init(parent_frame):
     for key, value in test_dict.items():                                                         # Iterate through test_dict and insert each entry
         tree.insert("", "end", values=(value[0], value[1], value[2]))                            # Insert row with name, date, score
     
-    tree.place(x=50, y=50, width=400, height=200)                                                # Place the Treeview at given coordinates with size
+    tree.place(x=30, y=60, width=400, height=200)                                                # Place the Treeview at given coordinates with size
 
 # FILE IMPORT FUNCTION
 def import_images(data_folder):
@@ -46,41 +46,10 @@ def import_images(data_folder):
             messagebox.showinfo("Error", f"Error encountered : {e}")                             # Show error message if file move fails
     else:
         messagebox.showinfo("Error", "Wrong File Format")                                        # Show error message for invalid file type
+
+def reset_app():
+    print("reset")
     
-
-def connection_to_raspi():
-    HOST = 'raspberrypi.local'  # or the static IP like '192.168.137.2'
-    PORT = 12345
-
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.connect((HOST, PORT))
-        s.sendall(b"Hello from PC")
-        data = s.recv(1024)
-
-    print('Received from Pi:', data.decode())
-
-
-# EXCHANGING FRAMES FROM ONE TO ANOTHER | (CTK FRAME AS PARAMETER)
-def show_frame(frame):
-    frame.tkraise()
-
-
-# # server_pi.py
-# import socket
-
-# HOST = '0.0.0.0'
-# PORT = 12345
-
-# with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-#     s.bind((HOST, PORT))
-#     s.listen()
-#     print(f"Listening on {PORT}...")
-#     conn, addr = s.accept()
-#     with conn:
-#         print('Connected by', addr)
-#         while True:
-#             data = conn.recv(1024)
-#             if not data:
-#                 break
-#             print("Received:", data.decode())
-#             conn.sendall(b"Hello from Pi")
+def del_emp():
+    print("Delete emp")
+    

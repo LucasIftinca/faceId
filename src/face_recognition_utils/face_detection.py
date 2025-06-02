@@ -23,7 +23,7 @@ def face_detection(video_label):
     # Setare url pentru flux video de la camera IP
     url="rtsp://admin:adminadmin1@192.168.1.108:554/cam/realmonitor?channel=1&subtype=0"
 
-    capture = cv2.VideoCapture(3)
+    capture = cv2.VideoCapture(1)
     if not capture.isOpened():
         print("EROARE CAMERA")
         return
@@ -36,19 +36,23 @@ def face_detection(video_label):
         if not ret:
             return
 
-        frame = cv2.resize(frame, (300, 220))
         frame_count += 1
 
         if frame_count % 5 == 0:
+            # Run face recognition on the original BGR frame
             frame = process_frame(frame, face_detector, face_recognizer, embeddings)
 
+        # Now resize and convert for display
+        frame = cv2.resize(frame, (300, 240))  # or match your label size
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        img = Image.fromarray(frame)
-        ctk_img = CTkImage(light_image=img, dark_image=img)
 
-        video_label.configure(image=ctk_img)
-        video_label.image = ctk_img
+        img = Image.fromarray(frame)
+        imgtk = ImageTk.PhotoImage(img)
+
+        video_label.configure(image=imgtk)
+        video_label.image = imgtk
 
         video_label.after(10, update_frame)
 
     update_frame()
+
