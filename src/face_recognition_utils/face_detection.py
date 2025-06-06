@@ -6,7 +6,7 @@ from customtkinter import CTkImage
 
 
 # main.py
-from src.face_recognition_utils.model_loader import load_models, load_embeddings
+from src.face_recognition_utils.model_loader import load_models, load_dictionary
 from src.face_recognition_utils.face_recognition import refresh_embeddings, process_frame
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -15,13 +15,14 @@ IMAGES_DIR = os.path.join(BASE_DIR, "data", "images")
 face_detector, face_recognizer = load_models()
 
 def face_detection(video_label):
+    
     BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     IMAGES_DIR = os.path.join(BASE_DIR, "data", "images")
 
 
     face_detector, face_recognizer = load_models()
     refresh_embeddings(IMAGES_DIR, face_detector, face_recognizer)
-    embeddings = load_embeddings()
+    embeddings = load_dictionary()
 
     # Setare url pentru flux video de la camera IP
     url="rtsp://admin:adminadmin1@192.168.1.108:554/cam/realmonitor?channel=1&subtype=0"

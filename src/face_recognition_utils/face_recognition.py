@@ -2,6 +2,8 @@ import cv2
 import os
 import numpy as np
 
+from  src.face_recognition_utils.model_loader import *
+
 # Functie procesare frame(detectie+match+actiune)
 def process_frame(frame, face_detector, face_recognizer, embeddings):
     # Apel functie detectie fata, retuneaza embedding + date fata(coordonate x,y; width; height ...
@@ -61,7 +63,7 @@ def match(face_recognizer, feature, embeddings):
     for user, user_feature in zip(embeddings.keys(), embeddings.values()):
         # Obtinere matching score
         # cv2.FACE_RECOGNIZER_SF_FR_COSINE utilizeaza similaritatea cosinusului dintre 2 vectori(embeddinguri)
-        score = face_recognizer.match(feature, user_feature, cv2.FACE_RECOGNIZER_SF_FR_COSINE)
+        score = face_recognizer.match(feature, user_feature[0], cv2.FACE_RECOGNIZER_SF_FR_COSINE)
         # Update maxim gasit
         if score >= max_score:
             max_score = score
@@ -93,25 +95,50 @@ def refresh_embeddings(images_directory,face_detector, face_recognizer):
     # Salvare sub forma de fisier .npy (.npy permite serializarea obiectelor)
     np.save(r"data/embeddings.npy", dictionary)
 
-def refresh_embeddings_2(images_directory,emp_data,face_detector, face_recognizer):
-    #Datele sunt stocate in dictionar
-    dictionary = {}
-    # Parcurgere director imagini
-    for file in os.listdir(images_directory):
-        # Obtinere path imagine
-        file_path = os.path.join(images_directory,file)
-        # Citire imagine
-        image = cv2.imread(file_path)
-        # Apel functie detectie cu specificare de file(in caz de eroare este afisata imaginea corupta)
-        feature, face = recognize_face(image, face_detector, face_recognizer, file)
-        # Salt spre urmatoarea iteratie daca nu este identificata o fata
-        if face is None:
-            continue
-        # Trimming la path pentru obtinerea numelui ( /images/popescu.jpg -> popescu)
-        #user = os.path.splitext(os.path.basename(file))[0]
-        user = emp_data[0] + " " + emp_data [1]
-        # Adaugare in dictionar date obtinute
-        dictionary[user] = feature
-        
-    # Salvare sub forma de fisier .npy (.npy permite serializarea obiectelor)
-    np.save(r"data/embeddings.npy", dictionary)
+
+def delete_data_dictionary(name, old_dict):
+    del old_dict["name"]
+    
+    np.save(r"data/embeddings.npy", old_dict) #CHANGE PATH TO GLOBAL VARIABLE 
+
+
+def generate_embedding(path):
+    face_detector, face_recognizer = load_models()
+    
+    image = cv2.imread(path)
+    
+    height, width, _ = image.shape
+    # Setare input conform cu imaginea
+    face_detector.setInputSize((width, height))
+    # Extragere valori fete din functia .detect ( _ inlocuieste boolean-ul de verificare)
+    _, faces = face_detector.detect(image)
+    
+    # Verificare daca functia a fost apelata pe o imagine fara fete   
+    if faces is None:
+        return None, None
+    
+    # Alegerea celei mai mari/aproiate fete pentru economisire de resurse.
+    closest_face = max(faces, key = lambda face: face[2] * face[3])
+    # Alinierea artificiala a fetei (Cap intors)
+    aligned_face = face_recognizer.alignCrop(image, closest_face)
+    # Extragere embedding
+    feature = face_recognizer.feature(aligned_face)
+    
+    # Return embedding si date fata(pentru marcare cu dreptunghi folosind coord fetei)
+    return feature
+
+    
+def add_data_dictionary(name, start_date, end_date, unlimited_period, path):
+    
+    #VARIABELS#
+    embedding = generate_embedding(path)
+    
+    info_emp = [embedding, start_date, end_date, unlimited_period]
+    
+    data_dict = load_dictionary()
+    
+    data_dict[name] = info_emp
+    
+    np.save(r"data/embeddings_test.npy", data_dict) #CHANGE PATH TO GLOBAL VARIABLE 
+    
+

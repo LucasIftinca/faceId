@@ -8,9 +8,7 @@ from datetime import date, timedelta, datetime
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
 
 from .utils_gui import *
-from src.face_recognition_utils.face_detection import face_detection, IMAGES_DIR, face_recognizer, face_detector
-from src.face_recognition_utils.face_recognition import refresh_embeddings_2
-
+from src.face_recognition_utils.face_detection import face_detection
 
 data_folder = r"data/images"
 
@@ -71,10 +69,7 @@ class App(ctk.CTk):
         #FRAME WIDGETS#
         button_add = ctk.CTkButton(frame, text="Add", command=lambda: self.login_frame_builder("register"), width=140, height=28)
         button_add.place(x=20, y=100)
-
-        # button_add = ctk.CTkButton(frame, text="Add", command=self.main_frame_button_add_event, width=140, height=28)
-        # button_add.place(x=20, y=100)
-
+        
         button_delete = ctk.CTkButton(frame, text="Delete", command=lambda : self.login_frame_builder("delete"), width=140, height=28)
         button_delete.place(x=20, y=140)
 
@@ -86,6 +81,7 @@ class App(ctk.CTk):
 
         #FUNCTIONS#
         face_detection(self.video_label)
+        
 #==================================================================================================================================#    
 
 ###################
@@ -104,7 +100,10 @@ class App(ctk.CTk):
         today = date.today()
         tomorrow = today + timedelta(days=1)
         
-        button_select_photo = ctk.CTkButton(frame, text="Select Photo", command=self.get_filepath, width=140, height=28)
+        # button_select_photo = ctk.CTkButton(frame, text="SPhotoelect ", command=self.get_filepath, width=140, height=28)
+        # button_select_photo.place(x=20, y=15)
+        
+        button_select_photo = ctk.CTkButton(frame, text="DELET MAIN FRAME ", command=self.test_func, width=140, height=28)
         button_select_photo.place(x=20, y=15)
 
         # Name Label + Entry
@@ -269,8 +268,16 @@ class App(ctk.CTk):
 ################      
 #==================================================================================================================================#   
     def return_to_main_frame(self):
-        self.show_frame("main")
 
+        #self.frames["main"] = ctk.CTkFrame(self.container)
+        self.frames["main"] = ctk.CTkFrame(self.container)
+        self.frames["main"].grid(row=0, column=0, sticky="nsew")
+        
+        self.build_main_frame()
+        self.show_frame("main")
+      
+    
+    
     def main_frame_button_add_event(self):
         self.show_frame("register")
 
@@ -284,7 +291,12 @@ class App(ctk.CTk):
     def reset_app(self):
         print("RESET")
 
-    
+    def test_func(self):
+        print("TATATO")
+        
+        self.frames["main"].destroy()
+        
+       
 
     def get_filepath(self):
         self.selected_file_path = askopenfilename()
@@ -338,7 +350,6 @@ class App(ctk.CTk):
         info = [name, surname, start_date, stop_date, days_left]
         print(info)
         
-        refresh_embeddings_2(IMAGES_DIR, info, face_detector, face_recognizer)
         self.show_frame("main")
 
 

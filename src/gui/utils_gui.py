@@ -6,7 +6,7 @@ import tkinter
 from tkinter import messagebox, ttk
 from tkinter.filedialog import askopenfilename
 
-from src.face_recognition_utils.model_loader import load_embeddings
+# from src.face_recognition_utils.model_loader import load_embeddings
 
 import customtkinter
 
@@ -47,7 +47,7 @@ test_dict = {
 
 # TREEVIEW FUNCT (ctk frame as parameter )
 def tree_init(parent_frame):
-    dict_emp = load_embeddings()
+   # dict_emp = load_embeddings()
 
     tree = ttk.Treeview(parent_frame, columns=("Name", "Date Start", "Date End", "Days Left"), show="headings")
 

@@ -11,11 +11,11 @@ def load_models():
     
     return face_detector, face_recognizer
 
-def load_embeddings():
+def load_dictionary():
     try:
-        data = np.load(r"data/embeddings.npy", allow_pickle=True)
+        data = np.load(r"data/embeddings_test.npy", allow_pickle=True)
         embeddings = data.item() if data.size > 0 else {}
     except(ValueError,EOFError):
         embeddings = {}
-        
+    
     return embeddings
