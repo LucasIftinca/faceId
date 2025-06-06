@@ -1,14 +1,24 @@
 import os
 import sys
+import threading
+import cv2
 
 import customtkinter as ctk
 from tkcalendar import Calendar
+from customtkinter import CTkImage
+from PIL import Image, ImageTk
 from datetime import date, timedelta, datetime
+import time
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
 
 from .utils_gui import *
-from src.face_recognition_utils.face_detection import face_detection
+from src.face_recognition_utils.face_detection import *
+from src.face_recognition_utils.face_recognition import *
+from src.face_recognition_utils.model_loader import *
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+IMAGES_DIR = os.path.join(BASE_DIR, "data", "images")
 
 data_folder = r"data/images"
 
@@ -80,7 +90,8 @@ class App(ctk.CTk):
         self.video_label.place(x=180, y=20)
 
         #FUNCTIONS#
-        face_detection(self.video_label)
+        #face_detection(self.video_label)
+        threading.Thread(target=self.run_face_detection_thread, daemon=True).start()
         
 #==================================================================================================================================#    
 
@@ -351,6 +362,54 @@ class App(ctk.CTk):
         print(info)
         
         self.show_frame("main")
+    
+    
+    def update_video_label(self, imgtk):
+        self.video_label.configure(image=imgtk)
+        self.video_label.image = imgtk
+
+   
+
+    def run_face_detection_thread(self):
+        face_detector, face_recognizer = load_models()
+        embeddings = load_dictionary()
+
+        url = "rtsp://admin:adminadmin1@192.168.1.108:554/cam/realmonitor?channel=1&subtype=1"
+        capture = cv2.VideoCapture(url)
+
+        if not capture.isOpened():
+            print("EROARE CAMERA")
+            return
+
+        frame_count = 0
+        while True:
+            ret, frame = capture.read()
+            if not ret:
+                time.sleep(0.1)
+                continue
+
+            frame_count += 1
+            # Only process every 5th frame for performance
+            if frame_count % 5 == 0:
+                processed_frame = process_frame(frame, face_detector, face_recognizer, embeddings)
+            else:
+                processed_frame = frame
+
+            display_frame = cv2.resize(processed_frame, (300, 240))
+            display_frame = cv2.cvtColor(display_frame, cv2.COLOR_BGR2RGB)
+
+            img = Image.fromarray(display_frame)
+            imgtk = ImageTk.PhotoImage(img)
+
+            def update_gui(imgtk_copy=imgtk):
+                self.video_label.configure(image=imgtk_copy)
+                self.video_label.image = imgtk_copy  # prevent garbage collection
+
+            self.video_label.after(1, update_gui)
+
+            # Sleep for ~30 FPS
+            time.sleep(1 / 30)
+
 
 
 #==================================================================================================================================#
