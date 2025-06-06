@@ -1,7 +1,0 @@
-# Ignore Python cache
-__pycache__/
-*.py[cod]
-
-# Ignore OS-specific files
-.DS_Store
-Thumbs.db
