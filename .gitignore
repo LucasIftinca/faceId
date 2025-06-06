@@ -2,9 +2,6 @@
 __pycache__/
 *.py[cod]
 
-# Ignore virtual environment
-.venv/
-
 # Ignore OS-specific files
 .DS_Store
 Thumbs.db
