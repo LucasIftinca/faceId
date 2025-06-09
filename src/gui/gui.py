@@ -83,8 +83,8 @@ class App(ctk.CTk):
         button_delete = ctk.CTkButton(frame, text="Delete", command=lambda : self.login_frame_builder("delete"), width=140, height=28)
         button_delete.place(x=20, y=140)
 
-        button_reset = ctk.CTkButton(frame, text="Reset", command=self.reset_app, width=140, height=28)
-        button_reset.place(x=20, y=180)
+        # button_reset = ctk.CTkButton(frame, text="Reset", command=self.reset_app, width=140, height=28)
+        # button_reset.place(x=20, y=180)
 
         self.video_label = ctk.CTkLabel(frame, text="", width=300, height=240)
         self.video_label.place(x=180, y=20)
@@ -114,8 +114,8 @@ class App(ctk.CTk):
         # button_select_photo = ctk.CTkButton(frame, text="SPhotoelect ", command=self.get_filepath, width=140, height=28)
         # button_select_photo.place(x=20, y=15)
         
-        button_select_photo = ctk.CTkButton(frame, text="DELET MAIN FRAME ", command=self.test_func, width=140, height=28)
-        button_select_photo.place(x=20, y=15)
+        # button_select_photo = ctk.CTkButton(frame, text="DELET MAIN FRAME ", command=self.import_images, width=140, height=28)
+        # button_select_photo.place(x=20, y=15)
 
         # Name Label + Entry
         self.name_label = ctk.CTkLabel(frame, text="Name:")
@@ -164,7 +164,7 @@ class App(ctk.CTk):
         button_add = ctk.CTkButton(frame, text="Add Employee", command=self.get_emp_info, width=140, height=28)
         button_add.place(x=20, y=265)
         
-        button_add = ctk.CTkButton(frame, text="Add Employee", command=self.return_to_main_frame, width=140, height=28)
+        button_add = ctk.CTkButton(frame, text="Add Employee", command=self.show_frame("main"), width=140, height=28)
         button_add.place(x=180, y=265)
         
 
@@ -176,14 +176,15 @@ class App(ctk.CTk):
 #==================================================================================================================================#      
     def build_delete_frame(self):
         frame = self.frames["delete"]
-        #self.check_var = ctk.StringVar(value="off")
+        tree = tree_init(frame)
 
-        button_delete = ctk.CTkButton(frame, text="Delete", command=self.delete_emp, width=140, height=28)
+        button_delete = ctk.CTkButton(frame, text="Delete", command=lambda: delete_emp_from_dict(frame, tree), width=140, height=28)
         button_delete.place(x=30, y=270)
 
-        button_back = ctk.CTkButton(frame, text="Back", command=self.return_to_main_frame, width=140, height=28)
+        button_back = ctk.CTkButton(frame, text="Back", command=self.show_frame("main"), width=140, height=28)
         button_back.place(x = 190, y = 270)
-        tree_init(frame)
+        
+    
 
 ###################
 ####LOGIN FRAME####
@@ -278,7 +279,7 @@ class App(ctk.CTk):
 ####FUNCTIONS###
 ################      
 #==================================================================================================================================#   
-    def return_to_main_frame(self):
+    def rebuild_main_frame(self):
 
         #self.frames["main"] = ctk.CTkFrame(self.container)
         self.frames["main"] = ctk.CTkFrame(self.container)
@@ -286,36 +287,13 @@ class App(ctk.CTk):
         
         self.build_main_frame()
         self.show_frame("main")
-      
     
     
     def main_frame_button_add_event(self):
         self.show_frame("register")
 
     def main_frame_button_delete_event(self):
-        self.show_frame("delete")
-
-
-    # def main_frame_bsutton_reset_event(self):
-    #     reset_app()
-
-    def reset_app(self):
-        print("RESET")
-
-    def test_func(self):
-        print("TATATO")
-        
-        self.frames["main"].destroy()
-        
-       
-
-    def get_filepath(self):
-        self.selected_file_path = askopenfilename()
- 
-        
-
-    def reg_frame_checkbox(self):
-        self.show_frame("main")
+        self.show_frame("delete")      
 
     def button_delete_event(self):
         self.show_frame("delete")
@@ -326,9 +304,9 @@ class App(ctk.CTk):
     def show_frame(self, name):
         frame = self.frames[name]
         frame.tkraise()
-
-    def delete_emp(self):
-        del_emp()
+    
+    def get_filepath(self):
+        self.selected_file_path = askopenfilename()
         
     def get_emp_info(self):
         name = self.name_txtbox.get()
@@ -369,7 +347,22 @@ class App(ctk.CTk):
         self.video_label.image = imgtk
 
    
+    def delete_emp_from_dict(frame, tree):
+        item = tree.focus()
+        if not item:
+            print("No item selected.")
+            return
+        
+        # Remove from dictionary
+        if item in dict_emp:
+            del dict_emp[item]
+            print(f"Deleted {item} from dict.")
 
+        # Remove from treeview
+        tree.delete(item)
+        print("Deleted from tree view.")
+    
+    
     def run_face_detection_thread(self):
         face_detector, face_recognizer = load_models()
         embeddings = load_dictionary()

@@ -96,10 +96,7 @@ def refresh_embeddings(images_directory,face_detector, face_recognizer):
     np.save(r"data/embeddings.npy", dictionary)
 
 
-def delete_data_dictionary(name, old_dict):
-    del old_dict["name"]
-    
-    np.save(r"data/embeddings.npy", old_dict) #CHANGE PATH TO GLOBAL VARIABLE 
+
 
 
 def generate_embedding(path):
@@ -128,17 +125,5 @@ def generate_embedding(path):
     return feature
 
     
-def add_data_dictionary(name, start_date, end_date, unlimited_period, path):
-    
-    #VARIABELS#
-    embedding = generate_embedding(path)
-    
-    info_emp = [embedding, start_date, end_date, unlimited_period]
-    
-    data_dict = load_dictionary()
-    
-    data_dict[name] = info_emp
-    
-    np.save(r"data/embeddings_test.npy", data_dict) #CHANGE PATH TO GLOBAL VARIABLE 
-    
+
 
