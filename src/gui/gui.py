@@ -3,9 +3,11 @@ import sys
 import threading
 import cv2
 
-import customtkinter as ctk
+import tkinter as tk
+
 from tkcalendar import Calendar
 from customtkinter import CTkImage
+
 from PIL import Image, ImageTk
 from datetime import date, timedelta, datetime
 import time
@@ -17,16 +19,14 @@ from src.face_recognition_utils.face_detection import *
 from src.face_recognition_utils.face_recognition import *
 from src.face_recognition_utils.model_loader import *
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-IMAGES_DIR = os.path.join(BASE_DIR, "data", "images")
+from src.config import EMBEDDINGS_FILE, DETECTION_MODEL_PATH, RECOGNITION_MODEL_PATH
 
-data_folder = r"data/images"
 
 ###########
 ####APP####
 ###########  
 #==================================================================================================================================#   
-class App(ctk.CTk):
+class App(tk.Tk):
     def __init__(self):
         super().__init__()
 
@@ -34,24 +34,24 @@ class App(ctk.CTk):
         self.geometry("460x320")
         self.resizable(False, False)
 
-        ctk.set_appearance_mode("dark")
-        ctk.set_default_color_theme("blue")
+        tk.set_appearance_mode("dark")
+        tk.set_default_color_theme("blue")
 
         self.calendar = None
         self.select_date_button = None
 
         # Setup main container
-        self.container = ctk.CTkFrame(self)
+        self.container = tk.Frame(self)
         self.container.pack(fill="both", expand=True)
         self.container.grid_rowconfigure(0, weight=1)
         self.container.grid_columnconfigure(0, weight=1)
 
         # Initialize frames
         self.frames = {}
-        self.frames["main"] = ctk.CTkFrame(self.container)
-        self.frames["register"] = ctk.CTkFrame(self.container)
-        self.frames["delete"] = ctk.CTkFrame(self.container)
-        self.frames["login"] = ctk.CTkFrame(self.container)
+        self.frames["main"] = tk.Frame(self.container)
+        self.frames["register"] = tk.Frame(self.container)
+        self.frames["delete"] = tk.Frame(self.container)
+        self.frames["login"] = tk.Frame(self.container)
 
         for frame in self.frames.values():
             frame.grid(row=0, column=0, sticky="nsew")
@@ -77,16 +77,16 @@ class App(ctk.CTk):
         # frame_name = "main"
 
         #FRAME WIDGETS#
-        button_add = ctk.CTkButton(frame, text="Add", command=lambda: self.login_frame_builder("register"), width=140, height=28)
+        button_add = tk.Button(frame, text="Add", command=lambda: self.login_frame_builder("register"), width=140, height=28)
         button_add.place(x=20, y=100)
         
-        button_delete = ctk.CTkButton(frame, text="Delete", command=lambda : self.login_frame_builder("delete"), width=140, height=28)
+        button_delete = tk.Button(frame, text="Delete", command=lambda : self.login_frame_builder("delete"), width=140, height=28)
         button_delete.place(x=20, y=140)
 
         # button_reset = ctk.CTkButton(frame, text="Reset", command=self.reset_app, width=140, height=28)
         # button_reset.place(x=20, y=180)
 
-        self.video_label = ctk.CTkLabel(frame, text="", width=300, height=240)
+        self.video_label = tk.Label(frame, text="", width=300, height=240)
         self.video_label.place(x=180, y=20)
 
         #FUNCTIONS#
@@ -101,7 +101,7 @@ class App(ctk.CTk):
 #==================================================================================================================================#    
     def build_register_frame(self):
         frame = self.frames["register"]
-        self.check_var = ctk.StringVar(value="False")
+        self.check_var = tk.StringVar(value="False")
 
         #FRAME VARIABLES#
         today = date.today()
@@ -118,39 +118,39 @@ class App(ctk.CTk):
         # button_select_photo.place(x=20, y=15)
 
         # Name Label + Entry
-        self.name_label = ctk.CTkLabel(frame, text="Name:")
+        self.name_label = tk.Label(frame, text="Name:")
         self.name_label.place(x=20, y=45)
 
-        self.name_txtbox = ctk.CTkEntry(frame, width=140, height=28)
+        self.name_txtbox = tk.Entry(frame, width=140, height=28)
         self.name_txtbox.place(x=20, y=75)
 
         # Surname Label + Entry
-        self.surname_label = ctk.CTkLabel(frame, text="Surname:")
+        self.surname_label = tk.Label(frame, text="Surname:")
         self.surname_label.place(x=20, y=105)
 
-        self.surname_txtbox = ctk.CTkEntry(frame, width=140, height=28)
+        self.surname_txtbox = tk.Entry(frame, width=140, height=28)
         self.surname_txtbox.place(x=20, y=135)
 
         # Start Date Label + Entry
-        self.start_label = ctk.CTkLabel(frame, text="Start Date:")
+        self.start_label = tk.Label(frame, text="Start Date:")
         self.start_label.place(x=20, y=165)
 
-        self.datestart_txtbox = ctk.CTkTextbox(frame, width=80, height=28)
+        self.datestart_txtbox = tk.Entry(frame, width=80, height=28)
         self.datestart_txtbox.place(x=20, y=195)
         self.datestart_txtbox.insert("1.0", today.strftime("%d/%m/%y"))
         self.datestart_txtbox.bind("<Button-1>", self.show_calendar_inline_start)
 
         # Stop Date Label + Entry
-        self.stop_label = ctk.CTkLabel(frame, text="Stop Date:")
+        self.stop_label = tk.Label(frame, text="Stop Date:")
         self.stop_label.place(x=100, y=165)
 
-        self.datestop_txtbox = ctk.CTkTextbox(frame, width=80, height=28)
+        self.datestop_txtbox = tk.Entry(frame, width=80, height=28)
         self.datestop_txtbox.place(x=100, y=195)
         self.datestop_txtbox.insert("1.0", tomorrow.strftime("%d/%m/%y"))
         self.datestop_txtbox.bind("<Button-1>", self.show_calendar_inline_stop)
 
         # Unlimited Period Checkbox
-        self.unlimited = ctk.CTkCheckBox(
+        self.unlimited = tk.Checkbutton(
             frame,
             text="Unlimited Period",
             variable=self.check_var,
@@ -161,10 +161,10 @@ class App(ctk.CTk):
 
 
         #BUTTONS#
-        button_add = ctk.CTkButton(frame, text="Add Employee", command=self.get_emp_info, width=140, height=28)
+        button_add = tk.Button(frame, text="Add Employee", command=self.get_emp_info, width=140, height=28)
         button_add.place(x=20, y=265)
         
-        button_add = ctk.CTkButton(frame, text="Add Employee", command=self.show_frame("main"), width=140, height=28)
+        button_add = tk.Button(frame, text="Add Employee", command=self.show_frame("main"), width=140, height=28)
         button_add.place(x=180, y=265)
         
 
@@ -178,10 +178,10 @@ class App(ctk.CTk):
         frame = self.frames["delete"]
         tree = tree_init(frame)
 
-        button_delete = ctk.CTkButton(frame, text="Delete", command=lambda: delete_emp_from_dict(frame, tree), width=140, height=28)
+        button_delete = tk.Button(frame, text="Delete", command=lambda: delete_emp_from_dict(frame, tree), width=140, height=28)
         button_delete.place(x=30, y=270)
 
-        button_back = ctk.CTkButton(frame, text="Back", command=self.show_frame("main"), width=140, height=28)
+        button_back = tk.Button(frame, text="Back", command=self.show_frame("main"), width=140, height=28)
         button_back.place(x = 190, y = 270)
         
     
@@ -193,19 +193,19 @@ class App(ctk.CTk):
     def build_login_frame(self):
         frame = self.frames["login"]
 
-        self.username_label = ctk.CTkLabel(frame, text="User:")
+        self.username_label = tk.Label(frame, text="User:")
         self.username_label.pack(pady=(20, 5))
-        self.username_entry = ctk.CTkEntry(frame, placeholder_text="Enter username")
+        self.username_entry = tk.Entry(frame, placeholder_text="Enter username")
         self.username_entry.pack()
 
-        self.password_label = ctk.CTkLabel(frame, text="Password:")
+        self.password_label = tk.Label(frame, text="Password:")
         self.password_label.pack(pady=(10, 5))
-        self.password_entry = ctk.CTkEntry(frame, placeholder_text="Enter password", show="*")
+        self.password_entry = tk.Entry(frame, placeholder_text="Enter password", show="*")
         self.password_entry.pack()
 
-        self.error_label = ctk.CTkLabel(frame, text="Login Failed! Try again!", text_color="red")
+        self.error_label = tk.Label(frame, text="Login Failed! Try again!", text_color="red")
 
-        self.verify_button = ctk.CTkButton(frame, text="Verify", command=self.get_credentials)
+        self.verify_button = tk.Button(frame, text="Verify", command=self.get_credentials)
         self.verify_button.pack(pady=20)
         
     def login_frame_builder(self, name):
@@ -239,7 +239,7 @@ class App(ctk.CTk):
         self.calendar = Calendar(frame, selectmode="day")
         self.calendar.place(x=200, y=60)
 
-        self.select_date_button = ctk.CTkButton(frame, text="Use Selected Date", command=self.use_selected_date_start)
+        self.select_date_button = tk.Button(frame, text="Use Selected Date", command=self.use_selected_date_start)
         self.select_date_button.place(x=200, y=230)
 
     def use_selected_date_start(self):
@@ -271,7 +271,7 @@ class App(ctk.CTk):
         self.calendar = Calendar(frame, selectmode="day")
         self.calendar.place(x=200, y=60)
 
-        self.select_date_button = ctk.CTkButton(frame, text="Use Selected Date", command=self.use_selected_date_stop)
+        self.select_date_button = tk.Button(frame, text="Use Selected Date", command=self.use_selected_date_stop)
         self.select_date_button.place(x=200, y=230)
 #==================================================================================================================================#
 
@@ -282,7 +282,7 @@ class App(ctk.CTk):
     def rebuild_main_frame(self):
 
         #self.frames["main"] = ctk.CTkFrame(self.container)
-        self.frames["main"] = ctk.CTkFrame(self.container)
+        self.frames["main"] = tk.Frame(self.container)
         self.frames["main"].grid(row=0, column=0, sticky="nsew")
         
         self.build_main_frame()
@@ -361,49 +361,6 @@ class App(ctk.CTk):
         # Remove from treeview
         tree.delete(item)
         print("Deleted from tree view.")
-    
-    
-    def run_face_detection_thread(self):
-        face_detector, face_recognizer = load_models()
-        embeddings = load_dictionary()
-
-        url = "rtsp://admin:adminadmin1@192.168.1.108:554/cam/realmonitor?channel=1&subtype=1"
-        capture = cv2.VideoCapture(url)
-
-        if not capture.isOpened():
-            print("EROARE CAMERA")
-            return
-
-        frame_count = 0
-        while True:
-            ret, frame = capture.read()
-            if not ret:
-                time.sleep(0.1)
-                continue
-
-            frame_count += 1
-            # Only process every 5th frame for performance
-            if frame_count % 5 == 0:
-                processed_frame = process_frame(frame, face_detector, face_recognizer, embeddings)
-            else:
-                processed_frame = frame
-
-            display_frame = cv2.resize(processed_frame, (300, 240))
-            display_frame = cv2.cvtColor(display_frame, cv2.COLOR_BGR2RGB)
-
-            img = Image.fromarray(display_frame)
-            imgtk = ImageTk.PhotoImage(img)
-
-            def update_gui(imgtk_copy=imgtk):
-                self.video_label.configure(image=imgtk_copy)
-                self.video_label.image = imgtk_copy  # prevent garbage collection
-
-            self.video_label.after(1, update_gui)
-
-            # Sleep for ~30 FPS
-            time.sleep(1 / 30)
-
-
 
 #==================================================================================================================================#
 
