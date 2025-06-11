@@ -61,12 +61,15 @@ class AccessControlApp:
                                      font=("Arial", 20, "bold"), fg="#f0f0f0", bg="#1a1a1a")
         self.status_label.pack(pady=(10, 20))
 
+        
         self.video_label = tk.Label(self.root, bg="#1a1a1a")
-        self.video_label.pack(pady=(0, 10))
-
+        self.video_label.pack(pady=(10, 20))
+        
         self.center_frame = tk.Frame(self.root, bg="#1a1a1a")
         self.center_frame.pack(expand=True, fill="both", padx=20, pady=10)
-
+        
+        
+        
         # Load embeddings
         self.load_embeddings()
         self.back_to_main()
@@ -86,7 +89,8 @@ class AccessControlApp:
             self.last_displayed_status_text = text
 
     def recognize_loop_video_label(self):
-        cap = cv2.VideoCapture(1)
+        url="rtsp://admin:adminadmin1@192.168.1.108:554/cam/realmonitor?channel=1&subtype=1"
+        cap = cv2.VideoCapture(url)
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
         self.face_detector.setInputSize((320, 240))
@@ -166,6 +170,7 @@ class AccessControlApp:
     def clear_frame(self):
         for widget in self.center_frame.winfo_children():
             widget.destroy()
+        #self.video_label.destroy()
 
     def back_to_main(self):
         self.temp_face_embedding = None
