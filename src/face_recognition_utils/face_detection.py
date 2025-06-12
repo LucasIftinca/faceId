@@ -53,7 +53,9 @@ def face_detection(video_label):
         img = Image.fromarray(frame)
         imgtk = ImageTk.PhotoImage(img)
 
-        video_label.configure(image=imgtk)
+        if video_label.winfo_ismapped():
+            video_label.configure(image=imgtk)
+
         video_label.image = imgtk
 
         video_label.after(10, update_frame)

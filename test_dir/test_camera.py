@@ -90,7 +90,7 @@ class AccessControlApp:
 
     def recognize_loop_video_label(self):
         url="rtsp://admin:adminadmin1@192.168.1.108:554/cam/realmonitor?channel=1&subtype=1"
-        cap = cv2.VideoCapture(url)
+        cap = cv2.VideoCapture(1)
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
         self.face_detector.setInputSize((320, 240))
@@ -170,7 +170,7 @@ class AccessControlApp:
     def clear_frame(self):
         for widget in self.center_frame.winfo_children():
             widget.destroy()
-        #self.video_label.destroy()
+        self.video_label.pack_forget()
 
     def back_to_main(self):
         self.temp_face_embedding = None
@@ -187,7 +187,9 @@ class AccessControlApp:
 
         main_buttons_frame = tk.Frame(self.center_frame, bg="#1a1a1a")
         main_buttons_frame.pack(pady=10)
-
+        
+        self.video_label.pack(pady=(10, 20))  # Repack the video label
+        
         tk.Button(main_buttons_frame, text="Add User", command=self.add_user, **self.button_style).pack(fill='x', pady=5)
         tk.Button(main_buttons_frame, text="Delete User", command=self.delete_user, **self.button_style).pack(fill='x', pady=5)
         tk.Button(main_buttons_frame, text="Reset Recognition", command=self.reset_recognition, **self.button_style).pack(fill='x', pady=5)
