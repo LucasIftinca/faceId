@@ -1,4 +1,5 @@
-# main.py
+import cv2
+
 from src.app_ui import build_video_frame, main_frame
 
 if __name__ == "__main__":
