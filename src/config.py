@@ -1,63 +1,164 @@
 import cv2
 
+# --- File Paths ---
+EMBEDDINGS_FILE = "data/faces.npy"
+# Make sure these ONNX model files are in a 'models' directory
+FACE_DETECTION_MODEL = "models/face_detection_yunet_2023mar.onnx"
+FACE_RECOGNIZER_MODEL = "models/face_recognizer_fast.onnx"
 
-#ALL THE CONSTANTS ARE DECLARED HERE
+# --- Recognition Thresholds ---
+COSINE_THRESHOLD = 0.32
+
+# --- Camera/Video Settings ---
+DEFAULT_VIDEO_WIDTH = 320
+DEFAULT_VIDEO_HEIGHT = 240
+
+# --- Admin Settings ---
+ADMIN_PASSWORD = "1234"
+
+# --- Colors ---
+COLOR_PRIMARY_BG = "#1a1a1a"      
+COLOR_TEXT_LIGHT = "#f0f0f0"       
+COLOR_SUCCESS_GREEN = "#2ecc71"    
+COLOR_ERROR_RED = "#e74c3c"        
+COLOR_WARNING_ORANGE = "orange"         
+COLOR_IDLE_GRAY = "gray"            
 
 
-BUTTON_STYLE = {
-    "bg": "#007bff",
-    "fg": "white",
-    "font": ("Roboto", 20),
+# General button style
+BASE_BUTTON_STYLE = {
+    "fg": "#f0f0f0",
+    "font": ("Arial", 12, "bold"),
     "relief": "flat",
     "borderwidth": 0,
     "highlightthickness": 0,
     "activebackground": "#0056b3",
-    "activeforeground": "white",
+    "activeforeground": "#f0f0f0",
     "padx": 10,
     "pady": 5,
-    "width": 16,
-    # "height" :28,
 }
 
-ENTRY_STYLE = {
-    "bg": "#ffffff",  # Light background for good contrast
-    "fg": "#000000",  # Standard black text
-    "font": ("Roboto", 20),
+# Specific button styles inheriting from BASE_BUTTON_STYLE
+VERIFY_BUTTON_STYLE = {
+    **BASE_BUTTON_STYLE,
+    "bg": "#2ecc71",
+    "font": ("Arial", 16, "bold"),
+    "padx": 15,
+    "pady": 8,
+    "width": 15,
+    "height": 2,
+    "activebackground": "#218838", 
+}
+
+ADMIN_SETTINGS_BUTTON_STYLE = {
+    **BASE_BUTTON_STYLE,
+    "bg": "#007bff",
+    "font": ("Arial", 16, "bold"),
+    "padx": 10,
+    "pady": 5,
+    "width": 15,
+}
+
+LOGIN_BUTTON_STYLE = {
+    **BASE_BUTTON_STYLE,
+    "bg": "#007bff",
+    "font": ("Arial", 14, "bold"),
+    "padx": 13,
+    "pady": 7,
+    "width": 7,
+}
+
+CANCEL_BUTTON_STYLE = {
+    **BASE_BUTTON_STYLE,
+    "bg": "#007bff", 
+    "font": ("Arial", 14, "bold"),
+    "padx": 13,
+    "pady": 7,
+    "width": 7,
+}
+
+ADMIN_OPTION_BUTTON_STYLE = {
+    **BASE_BUTTON_STYLE,
+    "bg": "#007bff",
+    "font": ("Arial", 14, "bold"),
+    "padx": 13,
+    "pady": 7,
+}
+
+DELETE_BUTTON_STYLE = {
+    **BASE_BUTTON_STYLE,
+    "bg": "#e74c3c", 
+    "font": ("Arial", 14, "bold"),
+    "padx": 13,
+    "pady": 7,
+    "width": 10,
+}
+
+CHOOSE_IMAGE_BUTTON_STYLE = {
+    **BASE_BUTTON_STYLE,
+    "bg": "#007bff",
+    "font": ("Arial", 12, "bold"),
+    "padx": 10,
+    "pady": 5,
+}
+
+REGISTER_USER_BUTTON_STYLE = {
+    **BASE_BUTTON_STYLE,
+    "bg": "#007bff",
+    "font": ("Arial", 14, "bold"),
+    "padx": 13,
+    "pady": 7,
+}
+
+INPUT_FIELD_STYLE = {
+    "bg": "#2a2a2a",
+    "fg": "#f0f0f0",
+    "insertbackground": "#f0f0f0", # Cursor color
+    "bd": 1,
+    "relief": "solid",
+    "font": ("Arial", 15)
+}
+
+LABEL_STYLE = {
+    "bg": "#1a1a1a",
+    "fg": "#f0f0f0",
+    "font": ("Arial", 15, "bold")
+}
+
+STATUS_LABEL_STYLE = {
+    "font": ("Arial", 20, "bold"),
+    "bg": "#1a1a1a",
+}
+
+ERROR_LABEL_STYLE = {
+    "bg": "#1a1a1a",
+    "fg": "#e74c3c",
+    "font": ("Arial", 12, "bold")
+}
+
+INFO_LABEL_STYLE = {
+    "bg": "#1a1a1a",
+    "fg": "#f0f0f0",
+    "font": ("Arial", 13, "italic")
+}
+
+CHECKBOX_STYLE = {
+    "bg": "#1a1a1a",
+    "fg": "#f0f0f0",
+    "selectcolor": "#2a2a2a",
+    "activebackground": "#2a2a2a",
+    "activeforeground": "#f0f0f0",
+    "font": ("Arial", 13, "bold"),
     "relief": "flat",
-    "highlightthickness": 1,
-    "highlightbackground": "#007bff",  # Blue border like the button
-    "highlightcolor": "#0056b3",      # Highlighted border on focus
-    "insertbackground": "#000000",    # Cursor color
-    "width": 16,                      # Adjust width to match button width visually
+    "bd": 0
 }
 
-LABEL_STYLE_STATUS ={
-    "bg": "#2b2b2b",  # Light background for good contrast
-    "fg": "#FFFFFF",  # Standard black text
-    "font": ("Roboto", 20),
-    "relief": "flat",
+LISTBOX_STYLE = {
+    "bg": "#2a2a2a",
+    "fg": "#f0f0f0",
+    "selectbackground": "#007bff",
+    "selectforeground": "white",
+    "font": ("Arial", 12),
+    "bd": 1,
+    "relief": "solid",
 }
-
-LABEL_STYLE_MISC ={
-    "bg": "#2b2b2b",  # Light background for good contrast
-    "fg": "#FFFFFF",  # Standard black text
-    "font": ("Roboto", 10),
-    "relief": "flat",
-}
-
-#SERIALIZED DICTONARY RELATIVE PATH
-EMBEDDINGS_FILE = "data/faces.npy" 
-#RECOGNTION MODEL RELATIVE PATH
-RECOGNITION_MODEL = "models/face_recognizer_fast.onnx"
-#DETECTION MODEL RELATIVE PATH
-DETECTION_MODEL = "models/face_detection_yunet_2023mar.onnx"
-#CAMERA URL 
-CAMERA_URL = "rtsp://admin:adminadmin1@192.168.1.108:554/cam/realmonitor?channel=1&subtype=1"
-#
-COSINE_THRESHOLD = 0.5
-
-FACE_DETECTOR = cv2.FaceDetectorYN_create(DETECTION_MODEL,"", (0, 0) )
-FACE_DETECTOR.setScoreThreshold(0.6)
-FACE_RECOGNIZER = cv2.FaceRecognizerSF_create(RECOGNITION_MODEL, " ")
-
-INPUT_WIDTH, INPUT_HEIGHT = 320, 220

@@ -1,226 +1,628 @@
-import cv2 
 import tkinter as tk
-from tkinter import messagebox, ttk
-
-import sys, os
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-
-from src.config import * 
-from src.face_recog_detect import *
-from src.user_management import *
-
-#Variables 
-# Tkinter window setup
-root = tk.Tk()
-root.title("Nokia Garage Access")
-root.geometry("700x420")
-root.resizable(False, False)
-
-video_label = None
-status_label = None
-# Main frame
-main_frame = tk.Frame(root, bg="#2b2b2b")
-main_frame.pack(fill="both", expand=True)
-main_frame.grid_rowconfigure(0, weight=1)
-main_frame.grid_columnconfigure(0, weight=1)
+from tkinter import filedialog, messagebox, ttk
+from PIL import Image, ImageTk
+import cv2
+import numpy as np
+import threading
+import time
 
 
-def clear_frame(frame):
-    # Iterăm prin copii, dar NU distrugem video_label
-    for widget in frame.winfo_children():
-        if widget != video_label: # Asigură-te că nu distrugi video_label
-            widget.destroy()
-    if video_label:
-        video_label.pack_forget()
+try:
+    import RPi.GPIO as GPIO
+    GPIO_PIN_OUTPUT = 17 # Pin 17
+    _gpio_enabled_at_startup = True
+    print(f"RPi.GPIO imported. GPIO control enabled on pin {GPIO_PIN_OUTPUT}.")
+except ImportError:
+    print("RPi.GPIO not found. GPIO control disabled.")
+    _gpio_enabled_at_startup = False
+except Exception as e:
+    print(f"Error importing RPi.GPIO: {e}. GPIO control disabled.")
+    _gpio_enabled_at_startup = False
 
 
+# Import configurations and logic modules
+from src.config import (
+    ADMIN_PASSWORD, COLOR_PRIMARY_BG, COLOR_TEXT_LIGHT, COLOR_ERROR_RED,
+    COLOR_WARNING_ORANGE, COLOR_IDLE_GRAY, COLOR_SUCCESS_GREEN,
+    DEFAULT_VIDEO_WIDTH, DEFAULT_VIDEO_HEIGHT, STATUS_LABEL_STYLE,
+    VERIFY_BUTTON_STYLE, ADMIN_SETTINGS_BUTTON_STYLE, LOGIN_BUTTON_STYLE,
+    CANCEL_BUTTON_STYLE, ADMIN_OPTION_BUTTON_STYLE, DELETE_BUTTON_STYLE,
+    CHOOSE_IMAGE_BUTTON_STYLE, REGISTER_USER_BUTTON_STYLE, INPUT_FIELD_STYLE,
+    LABEL_STYLE, ERROR_LABEL_STYLE, INFO_LABEL_STYLE, CHECKBOX_STYLE, LISTBOX_STYLE
+)
+from src.embedding_control import reference_embeddings # Access the global dict directly
+from src.face_recognition import detect_and_recognize_face, get_embedding_from_image
+from src.user_management import UserManagement
+
+    
+class AppUI:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Access Control System")
+        self.root.geometry("720x420")
+        self.root.configure(bg=COLOR_PRIMARY_BG)
+
+        # Global UI elements shared across views
+        self.status_label = tk.Label(self.root, **STATUS_LABEL_STYLE)
+        self.status_label.pack(pady=(10, 10))
+        self.update_status("System Initializing...", COLOR_IDLE_GRAY)
+
+        self.main_content_frame = tk.Frame(self.root, bg=COLOR_PRIMARY_BG)
+        self.main_content_frame.pack(expand=True, fill="both", padx=10, pady=5)
+
+        # Shared state variables for UI
+        self.recognition_running = False
+        self.recognition_thread = None
+        self.stop_flag = False
+        self.cap = None  # OpenCV camera object
+        self.verification_timer = None # Timer for auto-stopping verification
+
+        # Reference to the Verify button for enabling/disabling
+        self.verify_button = None # This will be set in back_to_main
+
+        # UI specific variables for Add User form
+        self.temp_face_embedding = None
+        self.temp_name_entry = None
+        self.temp_start_entry = None
+        self.temp_end_entry = None
+        self.temp_undef_var = None
+        self.face_detection_status_label = None
+        self.register_user_btn = None # Reference to the register button
+
+        # UI specific variables for Admin Login
+        self.admin_password_entry = None
+        self.login_error_label = None
+
+        # User Management instance
+        self.user_manager = UserManagement()
+
+        self.gpio_enabled = _gpio_enabled_at_startup # Transfera starea globala la atributul clasei
+        if self.gpio_enabled: # Acum folosim atributul clasei
+            try:
+                GPIO.setmode(GPIO.BCM) # Folosește numerotarea BCM a pinilor (ex: GPIO17)
+                GPIO.setup(GPIO_PIN_OUTPUT, GPIO.OUT) # Setează pinul ca ieșire
+                GPIO.output(GPIO_PIN_OUTPUT, GPIO.LOW) # Asigură-te că pinul este LOW la început
+                print(f"GPIO pin {GPIO_PIN_OUTPUT} set up as output and set to LOW.")
+            except Exception as e:
+                print(f"Failed to set up GPIO: {e}. GPIO control disabled.")
+                self.gpio_enabled = False # Dezactiveaza GPIO pentru instanta curenta
+
+        # Initialize the main screen
+        self.video_label = None # Will be created by back_to_main
+        self.back_to_main()
+
+        # --- NOU: Adaugă o funcție pentru curățarea GPIO la închiderea aplicației ---
+        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+        # --- SFÂRȘIT NOU ---
+
+    def update_status(self, text, color):
+        """Updates the global status label."""
+        if self.status_label: # Check if label exists before updating
+            # Only update if text is different to avoid unnecessary UI redraws
+            if text != self.status_label.cget("text") or color != self.status_label.cget("fg"):
+                self.status_label.config(text=text, fg=color)
+                # self.root.update_idletasks() # Removed, generally not needed in threads with after()
+
+    def hex_to_rgb(self, hex_color):
+        """Converts a hex color string to an RGB tuple."""
+        hex_color = hex_color.lstrip('#')
+        return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+
+    def update_video_label_placeholder(self, text="Waiting . . ."):
+        """
+        Updates the video_label with a static placeholder image
+        containing text and background color matching the main frame.
+        """
+        # Ensure video_label exists before trying to configure it
+        if self.video_label is None or not self.video_label.winfo_exists():
+            return
+
+        blank_img = np.zeros((DEFAULT_VIDEO_HEIGHT, DEFAULT_VIDEO_WIDTH, 3), dtype=np.uint8)
+
+        # Use the background color of the main_content_frame
+        bgr_color = self.hex_to_rgb(COLOR_PRIMARY_BG)[::-1] # Convert RGB to BGR
+        blank_img[:,:] = bgr_color
+
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = 0.9
+        font_thickness = 2
+        text_color = (200, 200, 200) # Light gray text
+
+        text_size = cv2.getTextSize(text, font, font_scale, font_thickness)[0]
+        text_x = (DEFAULT_VIDEO_WIDTH - text_size[0]) // 2
+        text_y = (DEFAULT_VIDEO_HEIGHT + text_size[1]) // 2
+
+        cv2.putText(blank_img, text, (text_x, text_y), font, font_scale, text_color, font_thickness, cv2.LINE_AA)
+
+        img = Image.fromarray(blank_img)
+        imgtk = ImageTk.PhotoImage(image=img)
+        self.video_label.config(image=imgtk)
+        self.video_label.image = imgtk # Keep a reference!
+
+    def recognize_loop(self):
+        """
+        Threaded loop for capturing video frames, detecting faces,
+        and performing recognition. Updates the video_label and status.
+        """
+        # Deschide camera O SINGURĂ DATĂ, la începutul thread-ului.
+        # Logica de aici este că recognize_loop se rulează doar dacă recognition_running este False,
+        # deci self.cap ar trebui să fie None sau închis de stop_recognition_and_video.
+        if self.cap is None or not self.cap.isOpened():
+            print("Attempting to open camera...")
+            # Puteți înlocui 0 cu un URL de stream (e.g., RTSP) dacă folosiți o cameră IP
+            # self.cap = cv2.VideoCapture(r"http://192.168.1.133:4747/video")
+            self.cap = cv2.VideoCapture(0) # Folosește camera implicită (0)
+            if not self.cap.isOpened():
+                print("Failed to open camera.")
+                self.root.after(0, self.update_status, "Failed to open camera.", COLOR_ERROR_RED)
+                self.root.after(0, self.stop_recognition_and_video) # Oprește thread-ul grațios
+                return # Ieși din acest thread dacă camera nu poate fi deschisă
+
+        frame_counter = 0
+        current_status_text = "Locked"
+        current_status_color = COLOR_ERROR_RED
+        # --- NOU: Variabilă pentru starea GPIO ---
+        gpio_high_active = False
+        # --- SFÂRȘIT NOU ---
+
+        while not self.stop_flag:
+            ret, frame = self.cap.read()
+            if not ret:
+                # Camera ar putea fi deconectată sau stream-ul s-a oprit
+                self.root.after(0, self.update_status, "No camera feed or stream ended.", COLOR_ERROR_RED)
+                self.root.after(0, self.update_video_label_placeholder, "No camera feed")
+                self.stop_flag = True # Setează flag-ul pentru a opri bucla
+                continue # Sari la următoarea iterație, bucla se va închide
+
+            frame_display = cv2.resize(frame, (DEFAULT_VIDEO_WIDTH, DEFAULT_VIDEO_HEIGHT))
+            frame_process = frame_display.copy()
+
+            bbox = None # Inițializează bbox la începutul fiecărei iterații a buclei
+
+            frame_counter += 1
+
+            if frame_counter % 10 == 0: # Procesează fiecare al 10-lea cadru pentru eficiență
+                recognized_name, detected_bbox = detect_and_recognize_face(
+                    frame_process, reference_embeddings, (DEFAULT_VIDEO_WIDTH, DEFAULT_VIDEO_HEIGHT)
+                )
+                if detected_bbox:
+                    bbox = detected_bbox
+
+                if recognized_name:
+                    current_status_text = f"Unlocked: {recognized_name}"
+                    current_status_color = COLOR_SUCCESS_GREEN
+
+                    if self.gpio_enabled and not gpio_high_active:
+                        try:
+                            GPIO.output(GPIO_PIN_OUTPUT, GPIO.HIGH)
+                            gpio_high_active = True
+                            print(f"GPIO pin {GPIO_PIN_OUTPUT} set to HIGH.")
+                        except Exception as e:
+                            print(f"Error setting GPIO HIGH: {e}")
+
+                else:
+                    current_status_text = "Locked"
+                    current_status_color = COLOR_ERROR_RED
+
+                    if self.gpio_enabled and gpio_high_active:
+                        try:
+                            GPIO.output(GPIO_PIN_OUTPUT, GPIO.LOW)
+                            gpio_high_active = False
+                            print(f"GPIO pin {GPIO_PIN_OUTPUT} set to LOW.")
+                        except Exception as e:
+                            print(f"Error setting GPIO LOW: {e}")
+
+                self.root.after(0, self.update_status, current_status_text, current_status_color)
+
+            # Desenează dreptunghiul de încadrare dacă o față a fost detectată
+            if bbox:
+                x, y, w, h = bbox
+                if recognized_name: 
+                    cv2.rectangle(frame_display, (x, y), (x + w, y + h), (0, 255, 0), 2) # Verde
+                else: 
+                    cv2.rectangle(frame_display, (x, y), (x + w, y + h), (0, 0, 255), 2) # Rosu
             
+            # Actualizează fluxul video în UI
+            img = cv2.cvtColor(frame_display, cv2.COLOR_BGR2RGB)
+            img = Image.fromarray(img)
+            imgtk = ImageTk.PhotoImage(image=img)
 
-    
-def build_video_frame(frame):
-    clear_frame(frame)
-    
-    video_label = tk.Label(frame, bg="#e74c3c")
-    height = INPUT_HEIGHT
-    width = INPUT_WIDTH
-    video_label.place(relx=0.5, rely=0.35, anchor="center", height=height, width=width)
+            # Folosește root.after pentru a actualiza GUI din thread
+            self.root.after(0, lambda: self.video_label.config(image=imgtk))
+            self.root.after(0, lambda: setattr(self.video_label, '_imgtk', imgtk)) # Păstrează o referință!
 
+            time.sleep(0.01) # O mică pauză pentru a preveni utilizarea 100% a CPU-ului
 
-    status_label = tk.Label(frame, text="Locked", **LABEL_STYLE_STATUS)
-    status_label.place(relx=0.4, rely=0.7)
-
-    button_admin_settings = tk.Button(frame, text="Admin Settings", command=lambda: build_login_frame(frame), **BUTTON_STYLE)
-    button_admin_settings.place(relx=0.3, rely=0.95, anchor="s")
-
-    button_start_recog = tk.Button(
-        frame, 
-        text="Start Recognition", 
-        command=lambda: start_recognition(frame, video_label,status_label),
-        **BUTTON_STYLE
-    )
-    button_start_recog.place(relx=0.7, rely=0.95, anchor="s")
-
-
-def build_admin_frame(frame):
-    #stop_recognition(frame, video_label)
-    clear_frame(frame)
-
-    button_add_new_emp = tk.Button(frame, text="Add Employee", command=lambda: build_add_emp_frame(frame), **BUTTON_STYLE)
-    button_add_new_emp.pack(pady=20)
-
-    button_delete_emp = tk.Button(frame, text="Delete Employee", command=lambda: build_delete_emp_frame(frame), **BUTTON_STYLE)
-    button_delete_emp.pack(pady=20)
-
-    button_reset_recog = tk.Button(frame, text="Reset Recognition", command=lambda: reset_recognition(frame, video_label, status_label), **BUTTON_STYLE)
-    button_reset_recog.pack(pady=20)
-
-    button_reset_pass = tk.Button(frame, text="Reset Password", command=lambda: build_reset_pass_frame(frame), **BUTTON_STYLE)
-    button_reset_pass.pack(pady=20)
-
-
-def build_login_frame(frame):
-    stop_recognition(video_label)
-    clear_frame(frame)
-    
-    container = tk.Frame(frame, bg= "#2b2b2b")
-    container.place(relx=0.5, rely=0.5, anchor="center")  #REMOVE IF TOO LAGGY
-    
-    label_user = tk.Label(container, text="User", **LABEL_STYLE_MISC)
-    label_user.pack(anchor="w", pady=2)
-
-    entry_user = tk.Entry(container, ENTRY_STYLE)
-    entry_user.pack(anchor="center", pady=2, side="top")
-
-    label_pass = tk.Label(container, text="Password", **LABEL_STYLE_MISC)
-    label_pass.pack(anchor="w", pady=2)
-    
-    entry_password = tk.Entry(container,ENTRY_STYLE)
-    entry_password.pack(anchor="center", pady=2, side="top")
-    
-    label_result  = tk.Label(frame, text="Login Failed! Try again!", foreground ="#ff0000")
-    
-    
-    def verify_credentials():
-        username = entry_user.get()
-        password = entry_password.get()
-        logged_in = (username == "1" and password == "1")  # example
-
+        # Curățare după ce bucla se încheie
+        print("Recognition loop stopping...")
+        if self.cap and self.cap.isOpened(): # Asigură-te că self.cap există și este deschis înainte de a-l elibera
+            self.cap.release()
+            print("Camera released.")
+        self.cap = None # Setează la None după eliberare
+        self.root.after(0, self.update_video_label_placeholder)
+        self.root.after(0, self.update_status, "Idle", COLOR_IDLE_GRAY)
+        self.recognition_running = False
+        # Activează butonul Verify dacă este ecranul principal
+        if self.verify_button and self.verify_button.winfo_exists():
+            self.root.after(0, lambda: self.verify_button.config(state=tk.NORMAL))
         
-        
-        if logged_in:
-            build_admin_frame(frame)
-            # add other frames as needed
+
+        if self.gpio_enabled and gpio_high_active:
+            try:
+                GPIO.output(GPIO_PIN_OUTPUT, GPIO.LOW)
+                print(f"GPIO pin {GPIO_PIN_OUTPUT} set to LOW on loop stop.")
+            except Exception as e:
+                print(f"Error setting GPIO LOW on loop stop: {e}")
+
+
+
+    def start_recognition(self):
+        """Pornește thread-ul de recunoaștere facială și setează un timer pentru a-l opri."""
+        # Previne pornirea multiplă a thread-ului
+        if self.recognition_running:
+            print("Recognition already running, ignoring start request.")
+            return # Nu porni un thread nou dacă unul este deja activ
+
+        # Oprește orice timere în așteptare
+        if self.verification_timer:
+            self.root.after_cancel(self.verification_timer)
+            self.verification_timer = None
+
+        # Dezactivează butonul Verify pentru a preveni clicurile multiple
+        if self.verify_button:
+            self.verify_button.config(state=tk.DISABLED)
+
+        self.stop_flag = False
+        self.recognition_thread = threading.Thread(target=self.recognize_loop, daemon=True)
+        self.recognition_thread.start()
+        self.recognition_running = True
+        self.update_status("Initializing camera...", COLOR_IDLE_GRAY)
+        print("Recognition started.")
+
+        # Setează un timer pentru a opri recunoașterea după 5 secunde
+        self.verification_timer = self.root.after(5000, self.stop_recognition_and_video)
+
+
+    def stop_recognition_and_video(self):
+        """Oprește thread-ul de recunoaștere și eliberează resursele camerei."""
+        if not self.recognition_running and not self.stop_flag:
+            # Deja oprit sau în curs de oprire, nu este nevoie să faci nimic
+            return
+
+        self.stop_flag = True # Semnalizează thread-ului să se oprească
+
+        if self.verification_timer:
+            self.root.after_cancel(self.verification_timer)
+            self.verification_timer = None
+
+        # Nu face join direct thread-ului aici în thread-ul principal Tkinter,
+        # deoarece poate bloca UI-ul dacă recognize_loop este blocat.
+        # recognize_loop în sine se ocupă de curățarea sa și de setarea recognition_running = False.
+
+        self.update_status("Stopping recognition...", COLOR_IDLE_GRAY)
+        print("Stopping recognition requested.")
+
+        # Butonul va fi re-activat de recognize_loop când se va termina.
+        # Dacă thread-ul rămâne blocat, ar putea fi necesară o repornire manuală a aplicației,
+        # dar acest design este mult mai sigur împotriva clicurilor rapide.
+
+    def reset_recognition_state(self):
+        """Resetează sistemul de recunoaștere la o stare de repaus."""
+        self.stop_recognition_and_video()
+        # Oferă o mică întârziere pentru a permite thread-ului să se oprească și să elibereze resursele
+        self.root.after(500, lambda: self.update_status("System Reset", COLOR_IDLE_GRAY))
+        # Asigură-te că butonul este re-activat după resetare
+        if self.verify_button:
+            self.verify_button.config(state=tk.NORMAL)
+
+    def on_closing(self):
+        """Handle cleanup before closing the application."""
+        self.stop_recognition_and_video() # Ensure camera and thread are stopped
+        if self.gpio_enabled: # MODIFICARE AICI: Verificam atributul clasei
+            try:
+                GPIO.cleanup() # Resetează toți pinii GPIO la starea implicită
+                print("GPIO cleaned up.")
+            except Exception as e:
+                print(f"Error during GPIO cleanup: {e}")
+        self.root.destroy()
+
+    def clear_main_content_frame(self):
+        """Elimină toate widget-urile din cadrul principal de conținut."""
+        for widget in self.main_content_frame.winfo_children():
+            if widget != self.video_label:
+                widget.destroy()
+
+    def back_to_main(self):
+        """
+        Revine la ecranul principal de verificare,
+        afișând placeholder-ul fluxului video și butoanele principale.
+        """
+        self.stop_recognition_and_video() # Asigură-te că camera este oprită și placeholder-ul este setat
+
+        self.clear_main_content_frame()
+
+        # Resetează variabilele temporare pentru formularul de adăugare utilizator
+        self.temp_face_embedding = None
+        self.temp_name_entry = None
+        self.temp_start_entry = None
+        self.temp_end_entry = None
+        self.temp_undef_var = None
+        self.face_detection_status_label = None
+        self.register_user_btn = None
+        if self.login_error_label and self.login_error_label.winfo_exists():
+            self.login_error_label.destroy()
+            self.login_error_label = None
+
+        # Re-gridează video_label sau creează-l dacă este prima dată
+        if self.video_label is None or not self.video_label.winfo_exists():
+            self.video_label = tk.Label(self.main_content_frame, bg=self.main_content_frame["bg"],
+                                         width=DEFAULT_VIDEO_WIDTH, height=DEFAULT_VIDEO_HEIGHT)
+        self.video_label.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
+        self.update_video_label_placeholder()
+
+        self.main_content_frame.grid_columnconfigure(0, weight=1)
+        self.main_content_frame.grid_columnconfigure(1, weight=0)
+        self.main_content_frame.grid_rowconfigure(0, weight=1)
+
+        button_column_frame = tk.Frame(self.main_content_frame, bg=COLOR_PRIMARY_BG)
+        button_column_frame.grid(row=0, column=1, padx=20, pady=0, sticky="ns")
+
+        button_column_frame.grid_rowconfigure(0, weight=1)
+        button_column_frame.grid_rowconfigure(1, weight=0)
+        button_column_frame.grid_rowconfigure(2, weight=0)
+        button_column_frame.grid_rowconfigure(3, weight=1)
+
+        # Salvează referința la butonul Verify
+        self.verify_button = tk.Button(button_column_frame, text="Verify", command=self.start_recognition,
+                                         **VERIFY_BUTTON_STYLE)
+        self.verify_button.grid(row=1, column=0, pady=10, sticky="ew")
+
+        tk.Button(button_column_frame, text="Admin Settings", command=self.admin_settings_login,
+                  **ADMIN_SETTINGS_BUTTON_STYLE).grid(row=2, column=0, pady=10, sticky="ew")
+
+        self.update_status("Idle", COLOR_IDLE_GRAY)
+
+    def admin_settings_login(self):
+        """Afișează ecranul de autentificare pentru administrator."""
+        self.stop_recognition_and_video()
+        self.clear_main_content_frame()
+        self.update_status("Admin Login", COLOR_WARNING_ORANGE)
+
+        if self.video_label and self.video_label.winfo_exists():
+            self.video_label.grid_forget()
+
+        self.main_content_frame.grid_columnconfigure(0, weight=1)
+        self.main_content_frame.grid_columnconfigure(1, weight=1)
+        self.main_content_frame.grid_columnconfigure(2, weight=1)
+        self.main_content_frame.grid_rowconfigure(0, weight=1)
+        self.main_content_frame.grid_rowconfigure(1, weight=1)
+
+        login_frame = tk.Frame(self.main_content_frame, bg=COLOR_PRIMARY_BG)
+        login_frame.grid(row=1, column=1, pady=20, sticky="nsew")
+
+        tk.Label(login_frame, text="Password:", **LABEL_STYLE).pack(pady=(0,10))
+        self.admin_password_entry = tk.Entry(login_frame, **INPUT_FIELD_STYLE, show='*')
+        self.admin_password_entry.pack(ipadx=10, ipady=5)
+        self.admin_password_entry.bind("<Return>", lambda event=None: self.check_admin_password())
+
+        self.login_error_label = tk.Label(login_frame, text="", **ERROR_LABEL_STYLE)
+        self.login_error_label.pack(pady=(10, 0))
+
+        tk.Button(login_frame, text="Login", command=self.check_admin_password, **LOGIN_BUTTON_STYLE).pack(pady=15)
+        tk.Button(login_frame, text="Cancel", command=self.back_to_main, **CANCEL_BUTTON_STYLE).pack(pady=10)
+
+    def check_admin_password(self):
+        """Verifică parola de administrator introdusă."""
+        password = self.admin_password_entry.get().strip()
+        if password == ADMIN_PASSWORD:
+            if self.login_error_label:
+                self.login_error_label.config(text="")
+            self.show_admin_options()
         else:
-            label_result.pack(pady= 10)
-            label_result.after(2000, label_result.pack_forget)
-            
-    button_confirm = tk.Button(container, text = "Login", command= lambda : verify_credentials(), **BUTTON_STYLE )
-    button_confirm.pack(anchor= "center", pady= 10)
+            if self.login_error_label:
+                self.login_error_label.config(text="Incorrect password.")
+            self.admin_password_entry.delete(0, tk.END)
 
+    def show_admin_options(self):
+        """Afișează ecranul cu opțiunile de administrare."""
+        self.clear_main_content_frame()
+        if self.login_error_label and self.login_error_label.winfo_exists():
+            self.login_error_label.destroy()
+            self.login_error_label = None
 
-def build_add_emp_frame(frame):
-    data_holder = {"embedding": None}  # Use a mutable dict to store the embedding
-    
-    
-    clear_frame(frame)
+        if self.video_label and self.video_label.winfo_exists():
+            self.video_label.grid_forget()
+        self.update_status("Admin Mode", COLOR_WARNING_ORANGE)
 
-    container = tk.Frame(frame, bg= "#2b2b2b")
-    container.place(relx=0.25, rely=0.5, anchor="center")  #REMOVE IF TOO LAGGY
+        self.main_content_frame.grid_columnconfigure(0, weight=1)
+        self.main_content_frame.grid_columnconfigure(1, weight=1)
+        self.main_content_frame.grid_columnconfigure(2, weight=1)
+        self.main_content_frame.grid_rowconfigure(0, weight=1)
+        self.main_content_frame.grid_rowconfigure(1, weight=1)
 
-    label_name = tk.Label(container, text="Name", **LABEL_STYLE_MISC)
-    label_name.pack(anchor="w", pady=2)
-    
-    entry_name = tk.Entry(container, ENTRY_STYLE ) #width= 19)
-    entry_name.pack(anchor="center", pady=2)
+        admin_buttons_frame = tk.Frame(self.main_content_frame, bg=COLOR_PRIMARY_BG)
+        admin_buttons_frame.grid(row=1, column=1, pady=20, sticky="nsew")
 
+        tk.Button(admin_buttons_frame, text="Add User", command=self.add_user_screen,
+                  **ADMIN_OPTION_BUTTON_STYLE).pack(fill='x', pady=8)
+        tk.Button(admin_buttons_frame, text="Delete User", command=self.delete_user_screen,
+                  **ADMIN_OPTION_BUTTON_STYLE).pack(fill='x', pady=8)
+        tk.Button(admin_buttons_frame, text="Reset System (Idle)",
+                  command=lambda: [self.reset_recognition_state(), self.show_admin_options()],
+                  **ADMIN_OPTION_BUTTON_STYLE).pack(fill='x', pady=8)
+        tk.Button(admin_buttons_frame, text="Exit Admin", command=self.back_to_main,
+                  **ADMIN_OPTION_BUTTON_STYLE).pack(fill='x', pady=20) # Reusing this style
 
-    label_date_start = tk.Label(container, text="Start Date",  **LABEL_STYLE_MISC)
-    label_date_start.pack(anchor="w", pady=2)
-    
-    entry_date_start = tk.Entry(container, ENTRY_STYLE )
-    entry_date_start.pack(anchor="center", pady=2)
+    def add_user_screen(self):
+        """Afișează ecranul pentru adăugarea unui nou utilizator."""
+        self.stop_recognition_and_video()
+        self.clear_main_content_frame()
+        if self.video_label and self.video_label.winfo_exists():
+            self.video_label.grid_forget()
+        self.update_status("Add User", COLOR_WARNING_ORANGE)
 
+        self.main_content_frame.grid_columnconfigure(0, weight=1)
+        self.main_content_frame.grid_columnconfigure(1, weight=1)
+        self.main_content_frame.grid_columnconfigure(2, weight=1)
+        self.main_content_frame.grid_rowconfigure(0, weight=1)
 
-    label_date_stop = tk.Label(container, text="End Date",  **LABEL_STYLE_MISC)
-    label_date_stop.pack(anchor="w", pady=2)
-    
-    entry_date_stop = tk.Entry(container, ENTRY_STYLE )
-    entry_date_stop.pack(anchor="center", pady=2)
+        add_user_form_frame = tk.Frame(self.main_content_frame, bg=COLOR_PRIMARY_BG)
+        add_user_form_frame.grid(row=0, column=1, padx=20, pady=10, sticky="nsew")
 
+        add_user_form_frame.grid_columnconfigure(0, weight=0)
+        add_user_form_frame.grid_columnconfigure(1, weight=1)
 
-    temp_undef_var = tk.BooleanVar()
-    undef_check = tk.Checkbutton(container, text="Undefined Period ", variable=temp_undef_var,
-                                 bg="#2b2b2b", fg="#FFFFFF", selectcolor="#007bff",
-                                 activebackground="#007bff", activeforeground="#FFFFFF",
-                                 font=("Roboto", 10), relief="flat", bd=0)
-    undef_check.pack(anchor="center", pady=3)
-    
-    label_valid_image = tk.Label(container, text="Valid image here", **LABEL_STYLE_STATUS)
-    label_valid_image.pack(anchor="center", pady=3)
-    
-    
-    button_add_emp_data = tk.Button(container, text = "Add Employee", command=lambda: register_emp_data(entry_name, entry_date_start, entry_date_stop, temp_undef_var,  data_holder["embedding"]), **BUTTON_STYLE)
-    button_add_emp_data.config(state= tk.DISABLED)
-    
-    button_import_images = tk.Button(container, text = "Import Image", command= lambda : process_chosen_image(label_valid_image, button_add_emp_data, data_holder), **BUTTON_STYLE)
-    button_import_images.pack(anchor="center", pady=5)
-    
-   
-    button_add_emp_data.pack(anchor="center", pady=3)
-    
-    button_back_to_video = tk.Button(frame, text="Back", command=lambda: build_video_frame(frame), **BUTTON_STYLE)
-    button_back_to_video.pack(anchor="e", pady=5)
+        row_idx = 0
 
+        tk.Label(add_user_form_frame, text="Name:", **LABEL_STYLE).grid(row=row_idx, column=0, sticky="w", padx=5, pady=3)
+        self.temp_name_entry = tk.Entry(add_user_form_frame, **INPUT_FIELD_STYLE)
+        self.temp_name_entry.grid(row=row_idx, column=1, sticky="ew", padx=5, pady=3)
+        row_idx += 1
 
-   
-    
-def build_delete_emp_frame(frame):
-    clear_frame(frame)
-    columns = ("Name", "Start Date", "End Date", "Unlimited")
-    
-    # Mutable container to hold the selected name
-    selected_name = [None]  
-    
-    tree = ttk.Treeview(frame, columns=columns, show='headings')
-    for col in columns:
-        tree.heading(col, text=col)
-        tree.column(col, anchor="center", width=100)
+        tk.Label(add_user_form_frame, text="Start Date (YYYY-MM-DD):", **LABEL_STYLE).grid(row=row_idx, column=0, sticky="w", padx=5, pady=3)
+        self.temp_start_entry = tk.Entry(add_user_form_frame, **INPUT_FIELD_STYLE)
+        self.temp_start_entry.grid(row=row_idx, column=1, sticky="ew", padx=5, pady=3)
+        row_idx += 1
 
-    embeddings_dict = load_embeddings()
-    for name, (embedding, start, end, undef) in embeddings_dict.items():
-        tree.insert("", tk.END, values=(name, start, end, undef))
+        tk.Label(add_user_form_frame, text="End Date (YYYY-MM-DD):", **LABEL_STYLE).grid(row=row_idx, column=0, sticky="w", padx=5, pady=3)
+        self.temp_end_entry = tk.Entry(add_user_form_frame, **INPUT_FIELD_STYLE)
+        self.temp_end_entry.grid(row=row_idx, column=1, sticky="ew", padx=5, pady=3)
+        row_idx += 1
 
-    tree.pack(padx=10, pady=10, fill='x', expand=True, anchor="n")
-    
-    # Create delete button, initially disabled
-    button_delete_emp = tk.Button(frame, text="Delete Selected", command=lambda: delete_emp(tree, button_delete_emp), state=tk.DISABLED, **BUTTON_STYLE)
-    button_delete_emp.pack(side=tk.LEFT, padx=5, pady=10)
+        self.temp_undef_var = tk.BooleanVar()
+        undef_check = tk.Checkbutton(add_user_form_frame, text="Undefined Period", variable=self.temp_undef_var,
+                                         **CHECKBOX_STYLE)
+        undef_check.grid(row=row_idx, column=0, columnspan=2, pady=10)
+        row_idx += 1
 
-    button_back_to_video = tk.Button(frame, text="Back", command=lambda: build_video_frame(frame), **BUTTON_STYLE)
-    button_back_to_video.pack(side=tk.LEFT, padx=5, pady=10)
-    # Define selection handler
-    
-    def on_tree_select(event):
-        selected_item = tree.focus()
-        button_delete_emp.config(
-            state=tk.NORMAL if selected_item else tk.DISABLED
+        tk.Button(add_user_form_frame, text="Choose Image", command=self.process_chosen_image,
+                  **CHOOSE_IMAGE_BUTTON_STYLE).grid(row=row_idx, column=0, columnspan=2, pady=5)
+        row_idx += 1
+
+        self.face_detection_status_label = tk.Label(add_user_form_frame, text="No image selected.", **INFO_LABEL_STYLE)
+        self.face_detection_status_label.grid(row=row_idx, column=0, columnspan=2, pady=(0, 10))
+        row_idx += 1
+
+        register_button_frame = tk.Frame(add_user_form_frame, bg=COLOR_PRIMARY_BG)
+        register_button_frame.grid(row=row_idx, column=0, columnspan=2, pady=5)
+
+        self.register_user_btn = tk.Button(register_button_frame, text="Add User", command=self.register_user_data,
+                                             **REGISTER_USER_BUTTON_STYLE)
+        self.register_user_btn.pack(side=tk.LEFT, padx=5)
+        self.register_user_btn.config(state=tk.DISABLED) # Inițial dezactivat
+
+        tk.Button(register_button_frame, text="Cancel", command=self.show_admin_options,
+                  **CANCEL_BUTTON_STYLE).pack(side=tk.LEFT, padx=5)
+
+    def process_chosen_image(self):
+        """
+        Gestionează selecția imaginii pentru înregistrarea utilizatorului, detectează fața,
+        și actualizează embedding-ul temporar și starea.
+        """
+        filepath = filedialog.askopenfilename(filetypes=[("Image files", "*.jpg *.jpeg *.png")])
+        if not filepath:
+            self.temp_face_embedding = None
+            self.face_detection_status_label.config(text="No image selected.", fg=COLOR_TEXT_LIGHT)
+            self.register_user_btn.config(state=tk.DISABLED)
+            return
+
+        embedding, status_msg, status_color = get_embedding_from_image(
+            filepath, (DEFAULT_VIDEO_WIDTH, DEFAULT_VIDEO_HEIGHT)
+        )
+        self.temp_face_embedding = embedding
+        self.face_detection_status_label.config(text=status_msg, fg=status_color)
+
+        if embedding is not None:
+            self.register_user_btn.config(state=tk.NORMAL)
+        else:
+            self.register_user_btn.config(state=tk.DISABLED)
+
+    def register_user_data(self):
+        """Înregistrează utilizatorul cu datele colectate și embedding-ul."""
+        name = self.temp_name_entry.get().strip()
+        start = self.temp_start_entry.get().strip()
+        end = self.temp_end_entry.get().strip()
+        undef = self.temp_undef_var.get()
+
+        success, message = self.user_manager.add_user(
+            name, self.temp_face_embedding, start, end, undef
         )
 
-    tree.bind("<<TreeviewSelect>>", on_tree_select)
+        if success:
+            messagebox.showinfo("Success", message)
+            # Golește câmpurile formularului după înregistrarea cu succes
+            self.temp_face_embedding = None
+            self.temp_name_entry.delete(0, tk.END)
+            self.temp_start_entry.delete(0, tk.END)
+            self.temp_end_entry.delete(0, tk.END)
+            self.temp_undef_var.set(False)
+            if self.face_detection_status_label:
+                self.face_detection_status_label.config(text="No image selected.", fg=COLOR_TEXT_LIGHT)
+            self.register_user_btn.config(state=tk.DISABLED)
+            self.show_admin_options() # Revino la opțiunile de administrare după succes
+        else:
+            messagebox.showerror("Error", message)
 
-        
-        
-def build_reset_pass_frame(frame):
-    print()
-    
-# Build UI
-build_video_frame(main_frame)
-#build_add_emp_frame(main_frame)
-#build_admin_frame(main_frame)
-#build_delete_emp_frame(main_frame)
+    def delete_user_screen(self):
+        """Afișează ecranul pentru ștergerea unui utilizator."""
+        self.stop_recognition_and_video()
+        self.clear_main_content_frame()
+        if self.video_label and self.video_label.winfo_exists():
+            self.video_label.grid_forget()
+        self.update_status("Delete User", COLOR_WARNING_ORANGE)
 
+        self.main_content_frame.grid_columnconfigure(0, weight=1)
+        self.main_content_frame.grid_columnconfigure(1, weight=1)
+        self.main_content_frame.grid_columnconfigure(2, weight=1)
+        self.main_content_frame.grid_rowconfigure(0, weight=1)
 
-# Run app
-root.mainloop()
+        delete_user_frame = tk.Frame(self.main_content_frame, bg=COLOR_PRIMARY_BG)
+        delete_user_frame.grid(row=0, column=1, padx=20, pady=20, sticky="nsew")
+
+        tk.Label(delete_user_frame, text="Select a user to delete:", **LABEL_STYLE).pack(pady=(10,10))
+
+        listbox_container = tk.Frame(delete_user_frame, bg=COLOR_PRIMARY_BG)
+        listbox_container.pack(pady=10, padx=10, fill="both", expand=True)
+
+        scrollbar = tk.Scrollbar(listbox_container, orient="vertical")
+        scrollbar.pack(side="right", fill="y")
+
+        self.delete_listbox = tk.Listbox(listbox_container, **LISTBOX_STYLE, yscrollcommand=scrollbar.set, height=8)
+        self.delete_listbox.pack(side="left", fill="both", expand=True)
+        scrollbar.config(command=self.delete_listbox.yview)
+
+        self._populate_delete_listbox() # Populează listbox-ul
+
+        button_frame = tk.Frame(delete_user_frame, bg=COLOR_PRIMARY_BG)
+        button_frame.pack(pady=15)
+
+        tk.Button(button_frame, text="Delete", command=self.confirm_delete_user,
+                  **DELETE_BUTTON_STYLE).pack(side=tk.LEFT, padx=10)
+        tk.Button(button_frame, text="Cancel", command=self.show_admin_options,
+                  **CANCEL_BUTTON_STYLE).pack(side=tk.LEFT, padx=10)
+
+    def _populate_delete_listbox(self):
+        """Populează listbox-ul de utilizatori în ecranul de ștergere utilizator."""
+        self.delete_listbox.delete(0, tk.END) # Curăță elementele existente
+        users = self.user_manager.get_registered_users()
+        for actual_name, display_text in users:
+            self.delete_listbox.insert(tk.END, display_text)
+
+    def confirm_delete_user(self):
+        """Confirmă și efectuează ștergerea utilizatorului."""
+        selected_index = self.delete_listbox.curselection()
+        if selected_index:
+            selected_name_display = self.delete_listbox.get(selected_index[0])
+            # Extrage numele real (înainte de prima paranteză sau doar șirul)
+            actual_name = selected_name_display.split('(')[0].strip()
+
+            if messagebox.askyesno("Confirm Delete", f"Are you sure you want to delete user '{actual_name}'?"):
+                success, message = self.user_manager.delete_user(actual_name)
+                if success:
+                    self.show_admin_options() # Revino la opțiunile de administrare după ștergere
+                else:
+                    messagebox.showerror("Error", message)
+            else:
+                messagebox.showinfo("Cancelled", "User deletion cancelled.")
+        else:
+            messagebox.showwarning("No Selection", "Please select a user to delete.")

@@ -1,7 +1,10 @@
-import cv2
+import tkinter as tk
+from src.app_ui import AppUI
 
-from src.app_ui import build_video_frame, main_frame
+def main():
+    root = tk.Tk()
+    app = AppUI(root)
+    root.mainloop()
 
 if __name__ == "__main__":
-    build_video_frame(main_frame)
-
+    main()
