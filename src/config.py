@@ -9,9 +9,14 @@ FACE_RECOGNIZER_MODEL = "models/face_recognizer_fast.onnx"
 # --- Recognition Thresholds ---
 COSINE_THRESHOLD = 0.32
 
+# --- TIMERS ---
+VERIFY_TIMER = 5000
+
 # --- Camera/Video Settings ---
-DEFAULT_VIDEO_WIDTH = 320
-DEFAULT_VIDEO_HEIGHT = 240
+DEFAULT_VIDEO_WIDTH = 260
+DEFAULT_VIDEO_HEIGHT = 210
+CAMERA_URL = 0
+#CAMERA_URL = r"rtsp://admin:adminadmin1@192.168.1.108:554/cam/realmonitor?channel=1&subtype=1"
 
 # --- Admin Settings ---
 ADMIN_PASSWORD = "1234"

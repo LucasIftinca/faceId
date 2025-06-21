@@ -20,7 +20,7 @@ except Exception as e:
     _gpio_enabled_at_startup = False
 
 
-# Import configurations and logic modules
+
 from src.config import (
     ADMIN_PASSWORD, COLOR_PRIMARY_BG, COLOR_TEXT_LIGHT, COLOR_ERROR_RED,
     COLOR_WARNING_ORANGE, COLOR_IDLE_GRAY, COLOR_SUCCESS_GREEN,
@@ -28,9 +28,9 @@ from src.config import (
     VERIFY_BUTTON_STYLE, ADMIN_SETTINGS_BUTTON_STYLE, LOGIN_BUTTON_STYLE,
     CANCEL_BUTTON_STYLE, ADMIN_OPTION_BUTTON_STYLE, DELETE_BUTTON_STYLE,
     CHOOSE_IMAGE_BUTTON_STYLE, REGISTER_USER_BUTTON_STYLE, INPUT_FIELD_STYLE,
-    LABEL_STYLE, ERROR_LABEL_STYLE, INFO_LABEL_STYLE, CHECKBOX_STYLE, LISTBOX_STYLE
+    LABEL_STYLE, ERROR_LABEL_STYLE, INFO_LABEL_STYLE, CHECKBOX_STYLE, LISTBOX_STYLE, CAMERA_URL, VERIFY_TIMER
 )
-from src.embedding_control import reference_embeddings # Access the global dict directly
+from src.embedding_control import reference_embeddings 
 from src.face_recognition import detect_and_recognize_face, get_embedding_from_image
 from src.user_management import UserManagement
 
@@ -76,27 +76,24 @@ class AppUI:
         # User Management instance
         self.user_manager = UserManagement()
 
-        self.gpio_enabled = _gpio_enabled_at_startup # Transfera starea globala la atributul clasei
-        if self.gpio_enabled: # Acum folosim atributul clasei
+        self.gpio_enabled = _gpio_enabled_at_startup 
+        if self.gpio_enabled:
             try:
-                GPIO.setmode(GPIO.BCM) # Folosește numerotarea BCM a pinilor (ex: GPIO17)
-                GPIO.setup(GPIO_PIN_OUTPUT, GPIO.OUT) # Setează pinul ca ieșire
-                GPIO.output(GPIO_PIN_OUTPUT, GPIO.LOW) # Asigură-te că pinul este LOW la început
+                GPIO.setmode(GPIO.BCM)
+                GPIO.setup(GPIO_PIN_OUTPUT, GPIO.OUT) 
+                GPIO.output(GPIO_PIN_OUTPUT, GPIO.LOW) 
                 print(f"GPIO pin {GPIO_PIN_OUTPUT} set up as output and set to LOW.")
             except Exception as e:
                 print(f"Failed to set up GPIO: {e}. GPIO control disabled.")
-                self.gpio_enabled = False # Dezactiveaza GPIO pentru instanta curenta
+                self.gpio_enabled = False 
 
-        # Initialize the main screen
-        self.video_label = None # Will be created by back_to_main
+        self.video_label = None 
         self.back_to_main()
-
-        # --- NOU: Adaugă o funcție pentru curățarea GPIO la închiderea aplicației ---
+        
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
-        # --- SFÂRȘIT NOU ---
 
     def update_status(self, text, color):
-        """Updates the global status label."""
+
         if self.status_label: # Check if label exists before updating
             # Only update if text is different to avoid unnecessary UI redraws
             if text != self.status_label.cget("text") or color != self.status_label.cget("fg"):
@@ -109,17 +106,13 @@ class AppUI:
         return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
 
     def update_video_label_placeholder(self, text="Waiting . . ."):
-        """
-        Updates the video_label with a static placeholder image
-        containing text and background color matching the main frame.
-        """
+
         # Ensure video_label exists before trying to configure it
         if self.video_label is None or not self.video_label.winfo_exists():
             return
 
         blank_img = np.zeros((DEFAULT_VIDEO_HEIGHT, DEFAULT_VIDEO_WIDTH, 3), dtype=np.uint8)
 
-        # Use the background color of the main_content_frame
         bgr_color = self.hex_to_rgb(COLOR_PRIMARY_BG)[::-1] # Convert RGB to BGR
         blank_img[:,:] = bgr_color
 
@@ -137,51 +130,40 @@ class AppUI:
         img = Image.fromarray(blank_img)
         imgtk = ImageTk.PhotoImage(image=img)
         self.video_label.config(image=imgtk)
-        self.video_label.image = imgtk # Keep a reference!
+        self.video_label.image = imgtk # Keep a reference
 
     def recognize_loop(self):
-        """
-        Threaded loop for capturing video frames, detecting faces,
-        and performing recognition. Updates the video_label and status.
-        """
-        # Deschide camera O SINGURĂ DATĂ, la începutul thread-ului.
-        # Logica de aici este că recognize_loop se rulează doar dacă recognition_running este False,
-        # deci self.cap ar trebui să fie None sau închis de stop_recognition_and_video.
         if self.cap is None or not self.cap.isOpened():
             print("Attempting to open camera...")
-            # Puteți înlocui 0 cu un URL de stream (e.g., RTSP) dacă folosiți o cameră IP
-            # self.cap = cv2.VideoCapture(r"http://192.168.1.133:4747/video")
-            self.cap = cv2.VideoCapture(0) # Folosește camera implicită (0)
+            self.cap = cv2.VideoCapture(CAMERA_URL) 
             if not self.cap.isOpened():
                 print("Failed to open camera.")
                 self.root.after(0, self.update_status, "Failed to open camera.", COLOR_ERROR_RED)
-                self.root.after(0, self.stop_recognition_and_video) # Oprește thread-ul grațios
-                return # Ieși din acest thread dacă camera nu poate fi deschisă
+                self.root.after(0, self.stop_recognition_and_video) 
+                return 
 
         frame_counter = 0
         current_status_text = "Locked"
         current_status_color = COLOR_ERROR_RED
-        # --- NOU: Variabilă pentru starea GPIO ---
         gpio_high_active = False
-        # --- SFÂRȘIT NOU ---
 
         while not self.stop_flag:
             ret, frame = self.cap.read()
             if not ret:
-                # Camera ar putea fi deconectată sau stream-ul s-a oprit
+                
                 self.root.after(0, self.update_status, "No camera feed or stream ended.", COLOR_ERROR_RED)
                 self.root.after(0, self.update_video_label_placeholder, "No camera feed")
-                self.stop_flag = True # Setează flag-ul pentru a opri bucla
-                continue # Sari la următoarea iterație, bucla se va închide
+                self.stop_flag = True 
+                continue 
 
             frame_display = cv2.resize(frame, (DEFAULT_VIDEO_WIDTH, DEFAULT_VIDEO_HEIGHT))
             frame_process = frame_display.copy()
 
-            bbox = None # Inițializează bbox la începutul fiecărei iterații a buclei
+            bbox = None 
 
             frame_counter += 1
 
-            if frame_counter % 10 == 0: # Procesează fiecare al 10-lea cadru pentru eficiență
+            if frame_counter % 10 == 0: 
                 recognized_name, detected_bbox = detect_and_recognize_face(
                     frame_process, reference_embeddings, (DEFAULT_VIDEO_WIDTH, DEFAULT_VIDEO_HEIGHT)
                 )
@@ -214,35 +196,34 @@ class AppUI:
 
                 self.root.after(0, self.update_status, current_status_text, current_status_color)
 
-            # Desenează dreptunghiul de încadrare dacă o față a fost detectată
+
             if bbox:
                 x, y, w, h = bbox
                 if recognized_name: 
-                    cv2.rectangle(frame_display, (x, y), (x + w, y + h), (0, 255, 0), 2) # Verde
+                    cv2.rectangle(frame_display, (x, y), (x + w, y + h), (0, 255, 0), 2) # GREEN
                 else: 
-                    cv2.rectangle(frame_display, (x, y), (x + w, y + h), (0, 0, 255), 2) # Rosu
+                    cv2.rectangle(frame_display, (x, y), (x + w, y + h), (0, 0, 255), 2) # RED
             
-            # Actualizează fluxul video în UI
+
             img = cv2.cvtColor(frame_display, cv2.COLOR_BGR2RGB)
             img = Image.fromarray(img)
             imgtk = ImageTk.PhotoImage(image=img)
 
-            # Folosește root.after pentru a actualiza GUI din thread
+
             self.root.after(0, lambda: self.video_label.config(image=imgtk))
-            self.root.after(0, lambda: setattr(self.video_label, '_imgtk', imgtk)) # Păstrează o referință!
+            self.root.after(0, lambda: setattr(self.video_label, '_imgtk', imgtk))
 
-            time.sleep(0.01) # O mică pauză pentru a preveni utilizarea 100% a CPU-ului
+            time.sleep(0.01) 
 
-        # Curățare după ce bucla se încheie
         print("Recognition loop stopping...")
-        if self.cap and self.cap.isOpened(): # Asigură-te că self.cap există și este deschis înainte de a-l elibera
+        if self.cap and self.cap.isOpened(): 
             self.cap.release()
             print("Camera released.")
-        self.cap = None # Setează la None după eliberare
+        self.cap = None 
         self.root.after(0, self.update_video_label_placeholder)
         self.root.after(0, self.update_status, "Idle", COLOR_IDLE_GRAY)
         self.recognition_running = False
-        # Activează butonul Verify dacă este ecranul principal
+
         if self.verify_button and self.verify_button.winfo_exists():
             self.root.after(0, lambda: self.verify_button.config(state=tk.NORMAL))
         
@@ -257,18 +238,16 @@ class AppUI:
 
 
     def start_recognition(self):
-        """Pornește thread-ul de recunoaștere facială și setează un timer pentru a-l opri."""
-        # Previne pornirea multiplă a thread-ului
         if self.recognition_running:
             print("Recognition already running, ignoring start request.")
-            return # Nu porni un thread nou dacă unul este deja activ
+            return 
 
-        # Oprește orice timere în așteptare
+
         if self.verification_timer:
             self.root.after_cancel(self.verification_timer)
             self.verification_timer = None
 
-        # Dezactivează butonul Verify pentru a preveni clicurile multiple
+        # DISABLING VERIFY BUTTON
         if self.verify_button:
             self.verify_button.config(state=tk.DISABLED)
 
@@ -279,69 +258,55 @@ class AppUI:
         self.update_status("Initializing camera...", COLOR_IDLE_GRAY)
         print("Recognition started.")
 
-        # Setează un timer pentru a opri recunoașterea după 5 secunde
-        self.verification_timer = self.root.after(5000, self.stop_recognition_and_video)
+        # Verification timer
+        self.verification_timer = self.root.after(VERIFY_TIMER, self.stop_recognition_and_video)
 
 
     def stop_recognition_and_video(self):
         """Oprește thread-ul de recunoaștere și eliberează resursele camerei."""
         if not self.recognition_running and not self.stop_flag:
-            # Deja oprit sau în curs de oprire, nu este nevoie să faci nimic
             return
 
-        self.stop_flag = True # Semnalizează thread-ului să se oprească
+        self.stop_flag = True 
 
         if self.verification_timer:
             self.root.after_cancel(self.verification_timer)
             self.verification_timer = None
 
-        # Nu face join direct thread-ului aici în thread-ul principal Tkinter,
-        # deoarece poate bloca UI-ul dacă recognize_loop este blocat.
-        # recognize_loop în sine se ocupă de curățarea sa și de setarea recognition_running = False.
-
         self.update_status("Stopping recognition...", COLOR_IDLE_GRAY)
         print("Stopping recognition requested.")
 
-        # Butonul va fi re-activat de recognize_loop când se va termina.
-        # Dacă thread-ul rămâne blocat, ar putea fi necesară o repornire manuală a aplicației,
-        # dar acest design este mult mai sigur împotriva clicurilor rapide.
-
     def reset_recognition_state(self):
-        """Resetează sistemul de recunoaștere la o stare de repaus."""
         self.stop_recognition_and_video()
-        # Oferă o mică întârziere pentru a permite thread-ului să se oprească și să elibereze resursele
+        # Granting some time for the thread to free the resources
         self.root.after(500, lambda: self.update_status("System Reset", COLOR_IDLE_GRAY))
-        # Asigură-te că butonul este re-activat după resetare
+        # Reactivation of button after ending of recognizing
         if self.verify_button:
             self.verify_button.config(state=tk.NORMAL)
 
     def on_closing(self):
-        """Handle cleanup before closing the application."""
+        # Cleanup vefore closing app
         self.stop_recognition_and_video() # Ensure camera and thread are stopped
-        if self.gpio_enabled: # MODIFICARE AICI: Verificam atributul clasei
+        if self.gpio_enabled: 
             try:
-                GPIO.cleanup() # Resetează toți pinii GPIO la starea implicită
+                GPIO.cleanup() 
                 print("GPIO cleaned up.")
             except Exception as e:
                 print(f"Error during GPIO cleanup: {e}")
         self.root.destroy()
 
     def clear_main_content_frame(self):
-        """Elimină toate widget-urile din cadrul principal de conținut."""
+
         for widget in self.main_content_frame.winfo_children():
             if widget != self.video_label:
                 widget.destroy()
 
     def back_to_main(self):
-        """
-        Revine la ecranul principal de verificare,
-        afișând placeholder-ul fluxului video și butoanele principale.
-        """
-        self.stop_recognition_and_video() # Asigură-te că camera este oprită și placeholder-ul este setat
+        self.stop_recognition_and_video() 
 
         self.clear_main_content_frame()
 
-        # Resetează variabilele temporare pentru formularul de adăugare utilizator
+        # Resetting variables
         self.temp_face_embedding = None
         self.temp_name_entry = None
         self.temp_start_entry = None
@@ -353,7 +318,7 @@ class AppUI:
             self.login_error_label.destroy()
             self.login_error_label = None
 
-        # Re-gridează video_label sau creează-l dacă este prima dată
+        # Recreate video label
         if self.video_label is None or not self.video_label.winfo_exists():
             self.video_label = tk.Label(self.main_content_frame, bg=self.main_content_frame["bg"],
                                          width=DEFAULT_VIDEO_WIDTH, height=DEFAULT_VIDEO_HEIGHT)
@@ -372,7 +337,6 @@ class AppUI:
         button_column_frame.grid_rowconfigure(2, weight=0)
         button_column_frame.grid_rowconfigure(3, weight=1)
 
-        # Salvează referința la butonul Verify
         self.verify_button = tk.Button(button_column_frame, text="Verify", command=self.start_recognition,
                                          **VERIFY_BUTTON_STYLE)
         self.verify_button.grid(row=1, column=0, pady=10, sticky="ew")
@@ -383,7 +347,6 @@ class AppUI:
         self.update_status("Idle", COLOR_IDLE_GRAY)
 
     def admin_settings_login(self):
-        """Afișează ecranul de autentificare pentru administrator."""
         self.stop_recognition_and_video()
         self.clear_main_content_frame()
         self.update_status("Admin Login", COLOR_WARNING_ORANGE)
@@ -412,7 +375,6 @@ class AppUI:
         tk.Button(login_frame, text="Cancel", command=self.back_to_main, **CANCEL_BUTTON_STYLE).pack(pady=10)
 
     def check_admin_password(self):
-        """Verifică parola de administrator introdusă."""
         password = self.admin_password_entry.get().strip()
         if password == ADMIN_PASSWORD:
             if self.login_error_label:
@@ -424,7 +386,6 @@ class AppUI:
             self.admin_password_entry.delete(0, tk.END)
 
     def show_admin_options(self):
-        """Afișează ecranul cu opțiunile de administrare."""
         self.clear_main_content_frame()
         if self.login_error_label and self.login_error_label.winfo_exists():
             self.login_error_label.destroy()
@@ -451,10 +412,9 @@ class AppUI:
                   command=lambda: [self.reset_recognition_state(), self.show_admin_options()],
                   **ADMIN_OPTION_BUTTON_STYLE).pack(fill='x', pady=8)
         tk.Button(admin_buttons_frame, text="Exit Admin", command=self.back_to_main,
-                  **ADMIN_OPTION_BUTTON_STYLE).pack(fill='x', pady=20) # Reusing this style
+                  **ADMIN_OPTION_BUTTON_STYLE).pack(fill='x', pady=20) 
 
     def add_user_screen(self):
-        """Afișează ecranul pentru adăugarea unui nou utilizator."""
         self.stop_recognition_and_video()
         self.clear_main_content_frame()
         if self.video_label and self.video_label.winfo_exists():
@@ -509,16 +469,13 @@ class AppUI:
         self.register_user_btn = tk.Button(register_button_frame, text="Add User", command=self.register_user_data,
                                              **REGISTER_USER_BUTTON_STYLE)
         self.register_user_btn.pack(side=tk.LEFT, padx=5)
-        self.register_user_btn.config(state=tk.DISABLED) # Inițial dezactivat
+        self.register_user_btn.config(state=tk.DISABLED)
 
         tk.Button(register_button_frame, text="Cancel", command=self.show_admin_options,
                   **CANCEL_BUTTON_STYLE).pack(side=tk.LEFT, padx=5)
 
     def process_chosen_image(self):
-        """
-        Gestionează selecția imaginii pentru înregistrarea utilizatorului, detectează fața,
-        și actualizează embedding-ul temporar și starea.
-        """
+
         filepath = filedialog.askopenfilename(filetypes=[("Image files", "*.jpg *.jpeg *.png")])
         if not filepath:
             self.temp_face_embedding = None
@@ -538,7 +495,6 @@ class AppUI:
             self.register_user_btn.config(state=tk.DISABLED)
 
     def register_user_data(self):
-        """Înregistrează utilizatorul cu datele colectate și embedding-ul."""
         name = self.temp_name_entry.get().strip()
         start = self.temp_start_entry.get().strip()
         end = self.temp_end_entry.get().strip()
@@ -550,7 +506,7 @@ class AppUI:
 
         if success:
             messagebox.showinfo("Success", message)
-            # Golește câmpurile formularului după înregistrarea cu succes
+            # Resetting the variables
             self.temp_face_embedding = None
             self.temp_name_entry.delete(0, tk.END)
             self.temp_start_entry.delete(0, tk.END)
@@ -559,12 +515,11 @@ class AppUI:
             if self.face_detection_status_label:
                 self.face_detection_status_label.config(text="No image selected.", fg=COLOR_TEXT_LIGHT)
             self.register_user_btn.config(state=tk.DISABLED)
-            self.show_admin_options() # Revino la opțiunile de administrare după succes
+            self.show_admin_options() 
         else:
             messagebox.showerror("Error", message)
 
     def delete_user_screen(self):
-        """Afișează ecranul pentru ștergerea unui utilizator."""
         self.stop_recognition_and_video()
         self.clear_main_content_frame()
         if self.video_label and self.video_label.winfo_exists():
@@ -591,7 +546,7 @@ class AppUI:
         self.delete_listbox.pack(side="left", fill="both", expand=True)
         scrollbar.config(command=self.delete_listbox.yview)
 
-        self._populate_delete_listbox() # Populează listbox-ul
+        self._populate_delete_listbox() 
 
         button_frame = tk.Frame(delete_user_frame, bg=COLOR_PRIMARY_BG)
         button_frame.pack(pady=15)
@@ -602,24 +557,21 @@ class AppUI:
                   **CANCEL_BUTTON_STYLE).pack(side=tk.LEFT, padx=10)
 
     def _populate_delete_listbox(self):
-        """Populează listbox-ul de utilizatori în ecranul de ștergere utilizator."""
-        self.delete_listbox.delete(0, tk.END) # Curăță elementele existente
+        self.delete_listbox.delete(0, tk.END) 
         users = self.user_manager.get_registered_users()
         for actual_name, display_text in users:
             self.delete_listbox.insert(tk.END, display_text)
 
     def confirm_delete_user(self):
-        """Confirmă și efectuează ștergerea utilizatorului."""
         selected_index = self.delete_listbox.curselection()
         if selected_index:
             selected_name_display = self.delete_listbox.get(selected_index[0])
-            # Extrage numele real (înainte de prima paranteză sau doar șirul)
             actual_name = selected_name_display.split('(')[0].strip()
 
             if messagebox.askyesno("Confirm Delete", f"Are you sure you want to delete user '{actual_name}'?"):
                 success, message = self.user_manager.delete_user(actual_name)
                 if success:
-                    self.show_admin_options() # Revino la opțiunile de administrare după ștergere
+                    self.show_admin_options() 
                 else:
                     messagebox.showerror("Error", message)
             else:
