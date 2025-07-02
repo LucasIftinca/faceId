@@ -1,4 +1,4 @@
-from src.embedding_control import add_embedding, remove_embedding, get_all_user_names, get_user_data
+from src.embedding_control import add_embedding, remove_embedding, get_all_users_data
 from datetime import datetime
 
 class UserManagement:
@@ -35,13 +35,12 @@ class UserManagement:
 ######## DELETE USER DATA TO DISPLAY ########
     def get_registered_users(self):
         users_display = []
-        for name in get_all_user_names():
-            data = get_user_data(name)
-            if data:
-                display_text = f"{name}"
-                if data[3]: # undef_period True
-                    display_text += " (Undefined)"
-                else:
-                    display_text += f" ({data[1]} to {data[2]})" # Date start + end
-                users_display.append((name, display_text)) 
-        return users_display
+        for name, data in get_all_users_data().items():
+            display_text = f"{name}"
+            if data[3]:
+                display_text += "(Undefined)"
+            else:
+                display_text += f" ({data[1]} to {data[2]})" 
+            users_display.append((name, display_text))
+        return users_display    
+              

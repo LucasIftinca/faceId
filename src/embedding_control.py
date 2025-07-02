@@ -33,7 +33,7 @@ def get_all_user_names():
 def get_user_data(name):
     return reference_embeddings.get(name)
 
-def get_all_embeddings_data():
+def get_all_users_data():
     return reference_embeddings.copy()
 
 def add_embedding(name, embedding, start_date, end_date, undef_period):

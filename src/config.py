@@ -7,7 +7,7 @@ FACE_DETECTION_MODEL = "models/face_detection_yunet_2023mar.onnx"
 FACE_RECOGNIZER_MODEL = "models/face_recognizer_fast.onnx"
 
 # --- Recognition Thresholds ---
-COSINE_THRESHOLD = 0.32
+COSINE_THRESHOLD = 0.4
 
 # --- TIMERS ---
 VERIFY_TIMER = 7000
@@ -18,7 +18,7 @@ DEFAULT_VIDEO_HEIGHT = 210
 DEFAULT_PROCESS_WIDTH = 320
 CAMERA_URL = 0
 #CAMERA_URL = r"rtsp://admin:adminadmin1@192.168.1.108:554/cam/realmonitor?channel=1&subtype=1"
-CAMERA_URL = "http://192.168.1.133:4747/video"
+#CAMERA_URL = "http://192.168.1.133:4747/video"
 
 # --- Admin Settings ---
 ADMIN_PASSWORD = "1234"
@@ -45,7 +45,8 @@ BASE_BUTTON_STYLE = {
     "pady": 5,
 }
 
-# Specific button styles inheriting from BASE_BUTTON_STYLE
+###################### Specific button styles inheriting from BASE_BUTTON_STYLE
+
 VERIFY_BUTTON_STYLE = {
     **BASE_BUTTON_STYLE,
     "bg": "#2ecc71",
@@ -68,7 +69,7 @@ ADMIN_SETTINGS_BUTTON_STYLE = {
 
 LOGIN_BUTTON_STYLE = {
     **BASE_BUTTON_STYLE,
-    "bg": "#007bff",
+    "bg": "#2ecc71",
     "font": ("Arial", 14, "bold"),
     "padx": 13,
     "pady": 7,
@@ -77,7 +78,7 @@ LOGIN_BUTTON_STYLE = {
 
 CANCEL_BUTTON_STYLE = {
     **BASE_BUTTON_STYLE,
-    "bg": "#007bff", 
+    "bg": "#e74c3c", 
     "font": ("Arial", 14, "bold"),
     "padx": 13,
     "pady": 7,
@@ -94,7 +95,7 @@ ADMIN_OPTION_BUTTON_STYLE = {
 
 DELETE_BUTTON_STYLE = {
     **BASE_BUTTON_STYLE,
-    "bg": "#e74c3c", 
+    "bg": "#007bff", 
     "font": ("Arial", 14, "bold"),
     "padx": 13,
     "pady": 7,
@@ -105,8 +106,9 @@ CHOOSE_IMAGE_BUTTON_STYLE = {
     **BASE_BUTTON_STYLE,
     "bg": "#007bff",
     "font": ("Arial", 12, "bold"),
-    "padx": 10,
+    "padx": 13,
     "pady": 5,
+    "width": 15,
 }
 
 REGISTER_USER_BUTTON_STYLE = {

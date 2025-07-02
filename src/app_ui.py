@@ -244,9 +244,6 @@ class AppUI:
         self.stop_flag = True
         self.update_status("Stopping recognition...", COLOR_IDLE_GRAY)
 
-    # def reset_recognition_state(self):
-    #     self.stop_recognition_and_video()
-    #     self.root.after(500, lambda: self.update_status("System Reset", COLOR_IDLE_GRAY))
 
     def on_closing(self):
         self.stop_recognition_and_video()
@@ -368,9 +365,6 @@ class AppUI:
                     **ADMIN_OPTION_BUTTON_STYLE).pack(fill='x', pady=8)
         tk.Button(admin_buttons_frame, text="Delete User", command=self.delete_user_screen,
                     **ADMIN_OPTION_BUTTON_STYLE).pack(fill='x', pady=8)
-        # tk.Button(admin_buttons_frame, text="Reset System (Idle)",
-        #             command=lambda: [self.reset_recognition_state(), self.show_admin_options()],
-        #             **ADMIN_OPTION_BUTTON_STYLE).pack(fill='x', pady=8)
         tk.Button(admin_buttons_frame, text="Exit Admin", command=self.back_to_main,
                     **ADMIN_OPTION_BUTTON_STYLE).pack(fill='x', pady=20)
 
@@ -416,6 +410,11 @@ class AppUI:
         row_idx += 1
 
         tk.Button(add_user_form_frame, text="Choose Image", command=self.process_chosen_image,
+                    **CHOOSE_IMAGE_BUTTON_STYLE).grid(row=row_idx, column=0, columnspan=2, pady=5)
+        
+        row_idx += 1
+        
+        tk.Button(add_user_form_frame, text="Take Photo", command=self.process_chosen_image,
                     **CHOOSE_IMAGE_BUTTON_STYLE).grid(row=row_idx, column=0, columnspan=2, pady=5)
         row_idx += 1
 
