@@ -1,11 +1,16 @@
 import cv2
 
+
+
 # --- File Paths ---
 EMBEDDINGS_FILE = "data/faces.npy"
 # Make sure these ONNX model files are in a 'models' directory
 FACE_DETECTION_MODEL = "models/face_detection_yunet_2023mar.onnx"
 FACE_RECOGNIZER_MODEL = "models/face_recognizer_fast.onnx"
 
+# --- Interface Settings ---
+DEFAULT_APP_WIDTH = 790
+DEFAULT_APP_HEIGHT = 470
 # --- Recognition Thresholds ---
 COSINE_THRESHOLD = 0.4
 
@@ -31,6 +36,15 @@ COLOR_ERROR_RED = "#e74c3c"
 COLOR_WARNING_ORANGE = "orange"         
 COLOR_IDLE_GRAY = "gray"            
 
+DATE_DISPLAY_LABEL_STYLE = {
+    "bg": "#9497f1",  # Background color for date display labels
+    "fg": COLOR_TEXT_LIGHT,
+    "font": ("Helvetica", 10),
+    "relief": "solid",
+    "borderwidth": 1,
+    "width": 12, # A fixed width can help with alignment
+    "anchor": "w" # Align text to the west (left)
+}
 
 # General button style
 BASE_BUTTON_STYLE = {

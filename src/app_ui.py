@@ -1,11 +1,12 @@
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
-from tkcalendar import Calendar
 from PIL import Image, ImageTk
+from tkcalendar import Calendar
 import cv2
 import numpy as np
 import threading
 import time
+from datetime import datetime
 
 try:
     import RPi.GPIO as GPIO
@@ -26,7 +27,7 @@ from src.config import (
     VERIFY_BUTTON_STYLE, ADMIN_SETTINGS_BUTTON_STYLE, LOGIN_BUTTON_STYLE,
     CANCEL_BUTTON_STYLE, ADMIN_OPTION_BUTTON_STYLE, DELETE_BUTTON_STYLE,
     CHOOSE_IMAGE_BUTTON_STYLE, REGISTER_USER_BUTTON_STYLE, INPUT_FIELD_STYLE,
-    LABEL_STYLE, ERROR_LABEL_STYLE, INFO_LABEL_STYLE, CHECKBOX_STYLE, LISTBOX_STYLE, CAMERA_URL, VERIFY_TIMER, DEFAULT_PROCESS_WIDTH
+    LABEL_STYLE, ERROR_LABEL_STYLE, INFO_LABEL_STYLE, CHECKBOX_STYLE, LISTBOX_STYLE, CAMERA_URL, VERIFY_TIMER, DEFAULT_PROCESS_WIDTH, DEFAULT_APP_WIDTH, DEFAULT_APP_HEIGHT
 )
 from src.embedding_control import reference_embeddings
 from src.face_recognition import detect_and_recognize_face, get_embedding_from_image
@@ -36,7 +37,7 @@ class AppUI:
     def __init__(self, root):
         self.root = root
         self.root.title("Access Control System")
-        self.root.geometry("720x420")
+        self.root.geometry(f"{DEFAULT_APP_WIDTH}x{DEFAULT_APP_HEIGHT}")
         self.root.configure(bg=COLOR_PRIMARY_BG)
 
         self.status_label = tk.Label(self.root, **STATUS_LABEL_STYLE)
@@ -56,6 +57,8 @@ class AppUI:
 
         self.temp_face_embedding = None
         self.temp_name_entry = None
+        self.temp_start_date_var = tk.StringVar(value = "")
+        self.temp_end_date_var = tk.StringVar(value = "")
         self.temp_start_entry = None
         self.temp_end_entry = None
         self.temp_undef_var = None
@@ -138,6 +141,8 @@ class AppUI:
         if self.verification_timer:
             self.root.after_cancel(self.verification_timer)
             self.verification_timer = None
+            
+        
 
     def recognize_loop(self):
         gpio_high_active = False
@@ -367,7 +372,7 @@ class AppUI:
         tk.Button(admin_buttons_frame, text="Delete User", command=self.delete_user_screen,
                     **ADMIN_OPTION_BUTTON_STYLE).pack(fill='x', pady=8)
         tk.Button(admin_buttons_frame, text="Exit Admin", command=self.back_to_main,
-                    **ADMIN_OPTION_BUTTON_STYLE).pack(fill='z', pady=20)
+                    **ADMIN_OPTION_BUTTON_STYLE).pack(fill='x', pady=20)
 
     def add_user_screen(self):
         self.stop_recognition_and_video()
