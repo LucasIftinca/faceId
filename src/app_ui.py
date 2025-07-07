@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from tkcalendar import Calendar
 from PIL import Image, ImageTk
 import cv2
 import numpy as np
@@ -366,7 +367,7 @@ class AppUI:
         tk.Button(admin_buttons_frame, text="Delete User", command=self.delete_user_screen,
                     **ADMIN_OPTION_BUTTON_STYLE).pack(fill='x', pady=8)
         tk.Button(admin_buttons_frame, text="Exit Admin", command=self.back_to_main,
-                    **ADMIN_OPTION_BUTTON_STYLE).pack(fill='x', pady=20)
+                    **ADMIN_OPTION_BUTTON_STYLE).pack(fill='z', pady=20)
 
     def add_user_screen(self):
         self.stop_recognition_and_video()
