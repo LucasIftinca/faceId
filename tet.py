@@ -84,6 +84,9 @@ class AppUI:
                 self.gpio_enabled = False
 
         self.video_label = None
+        self.add_user_camera_label = None # New label for camera feed in add user screen
+        self.camera_capture_active = False # Flag to control camera loop in add user screen
+
         self.back_to_main()
         
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
@@ -97,8 +100,11 @@ class AppUI:
         hex_color = hex_color.lstrip('#')
         return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
 
-    def update_video_label_placeholder(self, text="Waiting . . ."):
-        if self.video_label is None or not self.video_label.winfo_exists():
+    def update_video_label_placeholder(self, text="Waiting . . .", target_label=None):
+        if target_label is None:
+            target_label = self.video_label
+        
+        if target_label is None or not target_label.winfo_exists():
             return
 
         blank_img = np.zeros((DEFAULT_VIDEO_HEIGHT, DEFAULT_VIDEO_WIDTH, 3), dtype=np.uint8)
@@ -118,8 +124,8 @@ class AppUI:
 
         img = Image.fromarray(blank_img)
         imgtk = ImageTk.PhotoImage(image=img)
-        self.video_label.config(image=imgtk)
-        self.video_label.image = imgtk
+        target_label.config(image=imgtk)
+        target_label.image = imgtk
 
     def _cleanup_recognition_state(self, status_text="Idle", status_color=COLOR_IDLE_GRAY):
         if self.cap and self.cap.isOpened():
@@ -252,6 +258,12 @@ class AppUI:
         self.stop_flag = True
         self.update_status("Stopping recognition...", COLOR_IDLE_GRAY)
 
+        # Stop camera capture if active in add user screen
+        self.camera_capture_active = False
+        if self.cap and self.cap.isOpened():
+            self.cap.release()
+            self.cap = None
+
 
     def on_closing(self):
         self.stop_recognition_and_video()
@@ -266,8 +278,10 @@ class AppUI:
 
     def clear_main_content_frame(self):
         for widget in self.main_content_frame.winfo_children():
-            if widget != self.video_label:
+            # Don't destroy video_label if it's the recognition one
+            if widget != self.video_label: 
                 widget.destroy()
+
 ################################################ MAIN SCREEN ################################################
     def back_to_main(self):
         self.stop_recognition_and_video()
@@ -283,7 +297,8 @@ class AppUI:
         if self.login_error_label and self.login_error_label.winfo_exists():
             self.login_error_label.destroy()
             self.login_error_label = None
-
+        
+        # Ensure the main video_label is the one displayed
         if self.video_label is None or not self.video_label.winfo_exists():
             self.video_label = tk.Label(self.main_content_frame, bg=self.main_content_frame["bg"],
                                          width=DEFAULT_VIDEO_WIDTH, height=DEFAULT_VIDEO_HEIGHT)
@@ -317,7 +332,7 @@ class AppUI:
         self.update_status("Admin Login", COLOR_WARNING_ORANGE)
 
         if self.video_label and self.video_label.winfo_exists():
-            self.video_label.grid_forget()
+            self.video_label.grid_forget() # Hide the main video_label
 
         self.main_content_frame.grid_columnconfigure(0, weight=1)
         self.main_content_frame.grid_columnconfigure(1, weight=1)
@@ -357,7 +372,7 @@ class AppUI:
             self.login_error_label = None
 
         if self.video_label and self.video_label.winfo_exists():
-            self.video_label.grid_forget()
+            self.video_label.grid_forget() # Hide the main video_label
         self.update_status("Admin Mode", COLOR_WARNING_ORANGE)
 
         self.main_content_frame.grid_columnconfigure(0, weight=1)
@@ -377,16 +392,29 @@ class AppUI:
                     **ADMIN_OPTION_BUTTON_STYLE).pack(fill='x', pady=20)
 ################################################ ADD USER ################################################
     def add_user_screen(self):
-        self.stop_recognition_and_video()
+        self.stop_recognition_and_video() # Ensure main recognition stops
         self.clear_main_content_frame()
         if self.video_label and self.video_label.winfo_exists():
-            self.video_label.grid_forget()
+            self.video_label.grid_forget() # Hide the main video_label
+
         self.update_status("Add User", COLOR_WARNING_ORANGE)
 
         self.main_content_frame.grid_columnconfigure(0, weight=1)
-        self.main_content_frame.grid_columnconfigure(1, weight=1)
+        self.main_content_frame.grid_columnconfigure(1, weight=0) # Form column
         self.main_content_frame.grid_columnconfigure(2, weight=1)
         self.main_content_frame.grid_rowconfigure(0, weight=1)
+
+        # Frame for camera feed
+        camera_frame = tk.Frame(self.main_content_frame, bg=COLOR_PRIMARY_BG)
+        camera_frame.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
+
+        self.add_user_camera_label = tk.Label(camera_frame, bg=camera_frame["bg"],
+                                            width=DEFAULT_VIDEO_WIDTH, height=DEFAULT_VIDEO_HEIGHT)
+        self.add_user_camera_label.pack(expand=True, fill="both")
+        self.update_video_label_placeholder(target_label=self.add_user_camera_label)
+
+        # Start camera stream for adding user
+        self.start_add_user_camera_stream()
 
         add_user_form_frame = tk.Frame(self.main_content_frame, bg=COLOR_PRIMARY_BG)
         add_user_form_frame.grid(row=0, column=1, padx=20, pady=10, sticky="nsew")
@@ -423,7 +451,7 @@ class AppUI:
         
         row_idx += 1
         
-        tk.Button(add_user_form_frame, text="Take Photo", command=self.open_camera_window,
+        tk.Button(add_user_form_frame, text="Capture Photo", command=self.capture_photo_from_stream,
                     **CHOOSE_IMAGE_BUTTON_STYLE).grid(row=row_idx, column=0, columnspan=2, pady=5)
         row_idx += 1
 
@@ -442,75 +470,43 @@ class AppUI:
         tk.Button(register_button_frame, text="Cancel", command=self.show_admin_options,
                     **CANCEL_BUTTON_STYLE).pack(side=tk.LEFT, padx=5)
 
-    def open_camera_window(self):
-        camera_window = tk.Toplevel(self.root)
-        camera_window.title("Take Photo")
-        camera_window.geometry(f"{DEFAULT_VIDEO_WIDTH+100}x{DEFAULT_VIDEO_HEIGHT+100}")
-        camera_window.resizable(False, False)
-        camera_window.protocol("WM_DELETE_WINDOW", lambda: self.cancel_camera_window(camera_window))
-        camera_window.configure(bg=COLOR_PRIMARY_BG) 
-        
-        video_frame = tk.Frame(camera_window)
-        video_frame.pack(pady=10)
-        
-        video_label = tk.Label(video_frame)
-        video_label.pack()
-        
-        button_frame = tk.Frame(camera_window)
-        button_frame.configure(bg=COLOR_PRIMARY_BG)
-        button_frame.pack(pady=10)
-        
-        capture_btn = tk.Button(button_frame, text="Capture", command=lambda: self.capture_photo(camera_window, video_label), **ADMIN_OPTION_BUTTON_STYLE)
-        capture_btn.pack(side=tk.LEFT, padx=10)
-
-        
-        cancel_btn = tk.Button(button_frame, text="Cancel", command=lambda: self.cancel_camera_window(camera_window), **CANCEL_BUTTON_STYLE)
-        cancel_btn.pack(side=tk.LEFT, padx=10)
-        
-        # Start video capture
-        self.capture = cv2.VideoCapture(CAMERA_URL)
-        if not self.capture.isOpened():
-            messagebox.showerror("Error", "Could not open camera")
-            camera_window.destroy()
+    def start_add_user_camera_stream(self):
+        self.camera_capture_active = True
+        self.cap = cv2.VideoCapture(CAMERA_URL)
+        if not self.cap.isOpened():
+            messagebox.showerror("Error", "Could not open camera for adding user.")
+            self.camera_capture_active = False
+            self.update_video_label_placeholder(text="Camera Error", target_label=self.add_user_camera_label)
             return
-        
-        self.update_camera_preview(camera_window, video_label)
-    
-    def update_camera_preview(self, window, label):
-        ret, frame = self.capture.read()
+        self.update_add_user_camera_preview()
+
+    def update_add_user_camera_preview(self):
+        if not self.camera_capture_active or not self.add_user_camera_label.winfo_exists():
+            if self.cap and self.cap.isOpened():
+                self.cap.release()
+            return
+
+        ret, frame = self.cap.read()
         if ret:
             frame = cv2.resize(frame, (DEFAULT_VIDEO_WIDTH, DEFAULT_VIDEO_HEIGHT))
             cv2image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             img = Image.fromarray(cv2image)
             imgtk = ImageTk.PhotoImage(image=img)
-            label.imgtk = imgtk
-            label.configure(image=imgtk)
+            self.add_user_camera_label.imgtk = imgtk
+            self.add_user_camera_label.configure(image=imgtk)
         
-        ## Not recursive, just scheduling the video lable update
-        if window.winfo_exists():
-            window.after(10, lambda: self.update_camera_preview(window, label))
+        self.root.after(10, self.update_add_user_camera_preview)
     
-    def capture_photo(self, window, label):
-        ret, frame = self.capture.read()
-        if ret:
-            # Save the captured image temporarily
-            temp_file = "temp_capture.jpg"
-            cv2.imwrite(temp_file, frame)
-            
-            # Process the captured image
-            self.process_chosen_image(temp_file)
-            os.remove(temp_file)
-            
-            # Clean up
-            window.destroy()
-            if self.capture.isOpened():
-                self.capture.release()
-                
-    def cancel_camera_window(self, window):
-        window.destroy()
-        if self.capture and self.capture.isOpened():
-            self.capture.release()
-            
+    def capture_photo_from_stream(self):
+        if self.cap and self.cap.isOpened():
+            ret, frame = self.cap.read()
+            if ret:
+                temp_file = "temp_capture.jpg"
+                cv2.imwrite(temp_file, frame)
+                self.process_chosen_image(temp_file)
+                os.remove(temp_file)
+        else:
+            messagebox.showwarning("Camera Error", "Camera is not active or could not be opened.")
 
     def process_chosen_image(self, filepath=None):
         if filepath is None:

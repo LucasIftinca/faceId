@@ -11,8 +11,9 @@ FACE_RECOGNIZER_MODEL = "models/face_recognizer_fast.onnx"
 # --- Interface Settings ---
 DEFAULT_APP_WIDTH = 790
 DEFAULT_APP_HEIGHT = 470
-# --- Recognition Thresholds ---
+# --- Recognition  ---
 COSINE_THRESHOLD = 0.4
+DEFAULT_PROCESS_FRAME_RATE = 4
 
 # --- TIMERS ---
 VERIFY_TIMER = 7000
@@ -34,7 +35,8 @@ COLOR_TEXT_LIGHT = "#f0f0f0"
 COLOR_SUCCESS_GREEN = "#2ecc71"    
 COLOR_ERROR_RED = "#e74c3c"        
 COLOR_WARNING_ORANGE = "orange"         
-COLOR_IDLE_GRAY = "gray"            
+COLOR_IDLE_GRAY = "gray"   
+COLOR_INFO_BLUE = "#429ee9"         
 
 DATE_DISPLAY_LABEL_STYLE = {
     "bg": "#9497f1",  # Background color for date display labels
@@ -139,7 +141,7 @@ INPUT_FIELD_STYLE = {
     "insertbackground": "#f0f0f0", # Cursor color
     "bd": 1,
     "relief": "solid",
-    "font": ("Arial", 15)
+    "font": ("Arial", 14)
 }
 
 LABEL_STYLE = {
