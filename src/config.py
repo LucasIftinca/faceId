@@ -1,7 +1,6 @@
 import cv2
 
 
-
 # --- File Paths ---
 EMBEDDINGS_FILE = "data/faces.npy"
 # Make sure these ONNX model files are in a 'models' directory
@@ -41,7 +40,7 @@ COLOR_INFO_BLUE = "#429ee9"
 DATE_DISPLAY_LABEL_STYLE = {
     "bg": "#9497f1",  # Background color for date display labels
     "fg": COLOR_TEXT_LIGHT,
-    "font": ("Helvetica", 10),
+    "font": ("Helvetica", 12),
     "relief": "solid",
     "borderwidth": 1,
     "width": 12, # A fixed width can help with alignment
@@ -147,7 +146,7 @@ INPUT_FIELD_STYLE = {
 LABEL_STYLE = {
     "bg": "#1a1a1a",
     "fg": "#f0f0f0",
-    "font": ("Arial", 15, "bold")
+    "font": ("Arial", 14, "bold")
 }
 
 STATUS_LABEL_STYLE = {
@@ -173,7 +172,7 @@ CHECKBOX_STYLE = {
     "selectcolor": "#2a2a2a",
     "activebackground": "#2a2a2a",
     "activeforeground": "#f0f0f0",
-    "font": ("Arial", 13, "bold"),
+    "font": ("Arial", 14, "bold"),
     "relief": "flat",
     "bd": 0
 }

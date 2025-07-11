@@ -64,7 +64,7 @@ def detect_and_recognize_face(frame, reference_embeddings, input_size):
 def get_embedding_from_image(filepath, input_size):
 
     if face_detector is None or face_recognizer is None:
-        return None, "Error: Recognition models not loaded.", "red"
+        return None, "Error", "red"
 
     image = cv2.imread(filepath)
     if image is None:
@@ -76,13 +76,13 @@ def get_embedding_from_image(filepath, input_size):
     _, faces = face_detector.detect(img_resized)
 
     if faces is None or len(faces) == 0:
-        return None, "No face detected in file.", "red"
+        return None, "No valid face detected.", "red"
 
     faces_np = np.array(faces)
     valid_faces = faces_np[np.where((faces_np[:, 2] > 0) & (faces_np[:, 3] > 0))]
 
     if len(valid_faces) == 0:
-        return None, "No valid face detected in file.", "red"
+        return None, "No valid face detected.", "red"
 
     # Getting the largest face
     areas = valid_faces[:, 2] * valid_faces[:, 3]
@@ -91,4 +91,4 @@ def get_embedding_from_image(filepath, input_size):
     aligned_face = face_recognizer.alignCrop(img_resized, largest_face)
     embedding = face_recognizer.feature(aligned_face)
 
-    return embedding, "Face detected in file.", "green"
+    return embedding, "Face loaded.", "green"

@@ -1,7 +1,6 @@
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from PIL import Image, ImageTk
-from tkcalendar import Calendar
 import cv2
 import numpy as np
 import threading
@@ -58,14 +57,15 @@ class AppUI:
         self.verify_button = None
 
         self.temp_face_embedding = None
-        self.temp_name_entry = None
-        self.temp_start_date_var = tk.StringVar(value = "")
-        self.temp_end_date_var = tk.StringVar(value = "")
-        self.temp_start_entry = None
-        self.temp_end_entry = None
-        self.temp_undef_var = None
+        # Use tk.StringVar for entries to easily persist data across screens
+        self.temp_name_var = tk.StringVar(value="") 
+        self.temp_start_date_var = tk.StringVar(value="")
+        self.temp_end_date_var = tk.StringVar(value="")
+        self.temp_undef_var = tk.BooleanVar()
+
         self.face_detection_status_label = None
         self.register_user_btn = None
+        self.add_user_form_data = {} # To store data temporarily when switching to take photo screen
 
         self.admin_password_entry = None
         self.login_error_label = None
@@ -84,6 +84,9 @@ class AppUI:
                 self.gpio_enabled = False
 
         self.video_label = None
+        self.add_user_camera_label = None # Label for camera feed in take photo screen
+        self.camera_capture_active = False # Flag to control camera loop in take photo screen
+
         self.back_to_main()
         
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
@@ -97,8 +100,11 @@ class AppUI:
         hex_color = hex_color.lstrip('#')
         return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
 
-    def update_video_label_placeholder(self, text="Waiting . . ."):
-        if self.video_label is None or not self.video_label.winfo_exists():
+    def update_video_label_placeholder(self, text="Waiting . . .", target_label=None):
+        if target_label is None:
+            target_label = self.video_label
+        
+        if target_label is None or not target_label.winfo_exists():
             return
 
         blank_img = np.zeros((DEFAULT_VIDEO_HEIGHT, DEFAULT_VIDEO_WIDTH, 3), dtype=np.uint8)
@@ -118,8 +124,8 @@ class AppUI:
 
         img = Image.fromarray(blank_img)
         imgtk = ImageTk.PhotoImage(image=img)
-        self.video_label.config(image=imgtk)
-        self.video_label.image = imgtk
+        target_label.config(image=imgtk)
+        target_label.image = imgtk
 
     def _cleanup_recognition_state(self, status_text="Idle", status_color=COLOR_IDLE_GRAY):
         if self.cap and self.cap.isOpened():
@@ -247,10 +253,15 @@ class AppUI:
         self.verification_timer = self.root.after(VERIFY_TIMER, self.stop_recognition_and_video)
 
     def stop_recognition_and_video(self):
-        if not self.recognition_running and not self.stop_flag:
+        if not self.recognition_running and not self.stop_flag and not self.camera_capture_active:
             return
         self.stop_flag = True
+        self.camera_capture_active = False # Stop add user camera loop as well
         self.update_status("Stopping recognition...", COLOR_IDLE_GRAY)
+
+        if self.cap and self.cap.isOpened():
+            self.cap.release()
+            self.cap = None
 
 
     def on_closing(self):
@@ -266,24 +277,27 @@ class AppUI:
 
     def clear_main_content_frame(self):
         for widget in self.main_content_frame.winfo_children():
-            if widget != self.video_label:
+            # Don't destroy video_label if it's the recognition one
+            if widget != self.video_label: 
                 widget.destroy()
+
 ################################################ MAIN SCREEN ################################################
     def back_to_main(self):
         self.stop_recognition_and_video()
         self.clear_main_content_frame()
 
         self.temp_face_embedding = None
-        self.temp_name_entry = None
-        self.temp_start_entry = None
-        self.temp_end_entry = None
-        self.temp_undef_var = None
+        self.temp_name_var.set("")
+        self.temp_start_date_var.set("")
+        self.temp_end_date_var.set("")
+        self.temp_undef_var.set(False)
         self.face_detection_status_label = None
         self.register_user_btn = None
         if self.login_error_label and self.login_error_label.winfo_exists():
             self.login_error_label.destroy()
             self.login_error_label = None
-
+        
+        # Ensure the main video_label is the one displayed
         if self.video_label is None or not self.video_label.winfo_exists():
             self.video_label = tk.Label(self.main_content_frame, bg=self.main_content_frame["bg"],
                                          width=DEFAULT_VIDEO_WIDTH, height=DEFAULT_VIDEO_HEIGHT)
@@ -317,7 +331,7 @@ class AppUI:
         self.update_status("Admin Login", COLOR_WARNING_ORANGE)
 
         if self.video_label and self.video_label.winfo_exists():
-            self.video_label.grid_forget()
+            self.video_label.grid_forget() # Hide the main video_label
 
         self.main_content_frame.grid_columnconfigure(0, weight=1)
         self.main_content_frame.grid_columnconfigure(1, weight=1)
@@ -351,13 +365,14 @@ class AppUI:
             self.admin_password_entry.delete(0, tk.END)
 ################################################ ADMIN OPTIONS ################################################
     def show_admin_options(self):
+            
         self.clear_main_content_frame()
         if self.login_error_label and self.login_error_label.winfo_exists():
             self.login_error_label.destroy()
             self.login_error_label = None
 
         if self.video_label and self.video_label.winfo_exists():
-            self.video_label.grid_forget()
+            self.video_label.grid_forget() # Hide the main video_label
         self.update_status("Admin Mode", COLOR_WARNING_ORANGE)
 
         self.main_content_frame.grid_columnconfigure(0, weight=1)
@@ -377,54 +392,59 @@ class AppUI:
                     **ADMIN_OPTION_BUTTON_STYLE).pack(fill='x', pady=20)
 ################################################ ADD USER ################################################
     def add_user_screen(self):
-        self.stop_recognition_and_video()
+        self.stop_recognition_and_video() # Ensure main recognition stops and add user camera stops if active
         self.clear_main_content_frame()
         if self.video_label and self.video_label.winfo_exists():
-            self.video_label.grid_forget()
+            self.video_label.grid_forget() # Hide the main video_label
+
         self.update_status("Add User", COLOR_WARNING_ORANGE)
 
-        self.main_content_frame.grid_columnconfigure(0, weight=1)
-        self.main_content_frame.grid_columnconfigure(1, weight=1)
-        self.main_content_frame.grid_columnconfigure(2, weight=1)
-        self.main_content_frame.grid_rowconfigure(0, weight=1)
+        # Modificari AICI pentru centrare
+        # Creeaza 3 coloane: stanga (flexibila), centru (fixa/continut), dreapta (flexibila)
+        self.main_content_frame.grid_columnconfigure(0, weight=1)  # Coloana stanga flexibila
+        self.main_content_frame.grid_columnconfigure(1, weight=0)  # Coloana centrala pentru formular (nu se extinde)
+        self.main_content_frame.grid_columnconfigure(2, weight=1)  # Coloana dreapta flexibila
+        self.main_content_frame.grid_rowconfigure(0, weight=1)     # Randul pentru formular sa se extinda vertical
 
         add_user_form_frame = tk.Frame(self.main_content_frame, bg=COLOR_PRIMARY_BG)
-        add_user_form_frame.grid(row=0, column=1, padx=20, pady=10, sticky="nsew")
-
-        add_user_form_frame.grid_columnconfigure(0, weight=0)
-        add_user_form_frame.grid_columnconfigure(1, weight=0)
-
+        # Plaseaza formularul in coloana 1 (centrala)
+        # sticky="nsew" il va face sa se extinda in celula sa, dar celula nu se va extinde orizontal
+        add_user_form_frame.grid(row=0, column=1, padx=20, pady=10, sticky="nsew") 
+        
+        # Configureaza coloanele din interiorul formularului
+        add_user_form_frame.grid_columnconfigure(0, weight=0) # Coloana pentru etichete (nu se extinde)
+        add_user_form_frame.grid_columnconfigure(1, weight=1) # Coloana pentru input-uri (se extinde)
 
         row_idx = 0
 
         tk.Label(add_user_form_frame, text="Name:", **LABEL_STYLE).grid(row=row_idx, column=0, sticky="w", padx=5, pady=3)
-        self.temp_name_entry = tk.Entry(add_user_form_frame, **INPUT_FIELD_STYLE)
-        self.temp_name_entry.grid(row=row_idx, column=1, sticky="ew", padx=5, pady=3)
+        self.temp_name_entry = tk.Entry(add_user_form_frame, textvariable=self.temp_name_var, **INPUT_FIELD_STYLE)
+        self.temp_name_entry.grid(row=row_idx, column=1, sticky="ew", padx=5, pady=3) # Pastreaza "ew" pentru ca input-ul sa umple coloana 1 a formularului
         row_idx += 1
 
         tk.Label(add_user_form_frame, text="Start Date (YYYY-MM-DD):", **LABEL_STYLE).grid(row=row_idx, column=0, sticky="w", padx=5, pady=3)
-        self.temp_start_entry = tk.Entry(add_user_form_frame, **INPUT_FIELD_STYLE)
+        self.temp_start_entry = tk.Entry(add_user_form_frame, textvariable=self.temp_start_date_var, **INPUT_FIELD_STYLE)
         self.temp_start_entry.grid(row=row_idx, column=1, sticky="ew", padx=5, pady=3)
         row_idx += 1
 
         tk.Label(add_user_form_frame, text="End Date (YYYY-MM-DD):", **LABEL_STYLE).grid(row=row_idx, column=0, sticky="w", padx=5, pady=3)
-        self.temp_end_entry = tk.Entry(add_user_form_frame, **INPUT_FIELD_STYLE)
+        self.temp_end_entry = tk.Entry(add_user_form_frame, textvariable=self.temp_end_date_var, **INPUT_FIELD_STYLE)
         self.temp_end_entry.grid(row=row_idx, column=1, sticky="ew", padx=5, pady=3)
         row_idx += 1
 
-        self.temp_undef_var = tk.BooleanVar()
         undef_check = tk.Checkbutton(add_user_form_frame, text="Undefined Period", variable=self.temp_undef_var,
                                          **CHECKBOX_STYLE)
-        undef_check.grid(row=row_idx, column=0, columnspan=2, pady=10)
+        undef_check.grid(row=row_idx, column=0, columnspan=2, pady=10, sticky="w") 
         row_idx += 1
 
         tk.Button(add_user_form_frame, text="Choose Image", command=self.process_chosen_image,
-                    **CHOOSE_IMAGE_BUTTON_STYLE).grid(row=row_idx, column=0, columnspan=2, pady=5)
+                     **CHOOSE_IMAGE_BUTTON_STYLE).grid(row=row_idx, column=0, columnspan=2, pady=5)
         
         row_idx += 1
         
-        tk.Button(add_user_form_frame, text="Take Photo", command=self.open_camera_window,
-                    **CHOOSE_IMAGE_BUTTON_STYLE).grid(row=row_idx, column=0, columnspan=2, pady=5)
+        # Modified to go to the new take photo screen
+        tk.Button(add_user_form_frame, text="Take Photo", command=self.take_photo_screen,
+                     **CHOOSE_IMAGE_BUTTON_STYLE).grid(row=row_idx, column=0, columnspan=2, pady=5)
         row_idx += 1
 
         self.face_detection_status_label = tk.Label(add_user_form_frame, text="No image selected.", **INFO_LABEL_STYLE)
@@ -432,86 +452,142 @@ class AppUI:
         row_idx += 1
 
         register_button_frame = tk.Frame(add_user_form_frame, bg=COLOR_PRIMARY_BG)
-        register_button_frame.grid(row=row_idx, column=0, columnspan=2, pady=5)
+        # Centrarea butonului de inregistrare:
+        # Se plaseaza in coloana 0, columnspan 2 pentru a ocupa ambele coloane ale formularului
+        # si se foloseste pack cu 'expand' si 'fill' pe frame-ul intern
+        register_button_frame.grid(row=row_idx, column=0, columnspan=2, pady=5) 
+        # Configureaza grid-ul pentru a centra butoanele in interiorul acestui frame
+        register_button_frame.grid_columnconfigure(0, weight=1)
+        register_button_frame.grid_columnconfigure(1, weight=1)
+
 
         self.register_user_btn = tk.Button(register_button_frame, text="Add User", command=self.register_user_data,
-                                                 **REGISTER_USER_BUTTON_STYLE)
-        self.register_user_btn.pack(side=tk.LEFT, padx=5)
-        self.register_user_btn.config(state=tk.DISABLED)
+                                             **REGISTER_USER_BUTTON_STYLE)
+        self.register_user_btn.pack(side=tk.LEFT, padx=5) # Ramane pack in acest sub-frame
 
-        tk.Button(register_button_frame, text="Cancel", command=self.show_admin_options,
-                    **CANCEL_BUTTON_STYLE).pack(side=tk.LEFT, padx=5)
 
-    def open_camera_window(self):
-        camera_window = tk.Toplevel(self.root)
-        camera_window.title("Take Photo")
-        camera_window.geometry(f"{DEFAULT_VIDEO_WIDTH+100}x{DEFAULT_VIDEO_HEIGHT+100}")
-        camera_window.resizable(False, False)
-        camera_window.protocol("WM_DELETE_WINDOW", lambda: self.cancel_camera_window(camera_window))
-        camera_window.configure(bg=COLOR_PRIMARY_BG) 
+        tk.Button(register_button_frame, text="Cancel", command=self.return_to_admin_options,
+                     **CANCEL_BUTTON_STYLE).pack(side=tk.LEFT, padx=5) # Ramane pack in acest sub-frame
         
-        video_frame = tk.Frame(camera_window)
-        video_frame.pack(pady=10)
-        
-        video_label = tk.Label(video_frame)
-        video_label.pack()
-        
-        button_frame = tk.Frame(camera_window)
-        button_frame.configure(bg=COLOR_PRIMARY_BG)
-        button_frame.pack(pady=10)
-        
-        capture_btn = tk.Button(button_frame, text="Capture", command=lambda: self.capture_photo(camera_window, video_label), **ADMIN_OPTION_BUTTON_STYLE)
-        capture_btn.pack(side=tk.LEFT, padx=10)
+        if self.temp_face_embedding is not None:
+            self.face_detection_status_label.config(text="Face loaded.", fg=COLOR_SUCCESS_GREEN)
+        else:
+            self.face_detection_status_label.config(text="No image selected.", fg=COLOR_TEXT_LIGHT)
 
+################################################ TAKE PHOTO ################################################
+
+
+    def take_photo_screen(self):
+        self.clear_main_content_frame()
+        self.update_status("Take Photo", COLOR_WARNING_ORANGE)
+
+        self.main_content_frame.grid_columnconfigure(0, weight=1)  # Spatiu flexibil stanga
+        self.main_content_frame.grid_columnconfigure(1, weight=0)  # Coloana pentru camera (fixa)
+        self.main_content_frame.grid_columnconfigure(2, weight=0)  # Coloana pentru butoane (fixa
+      
+        self.main_content_frame.grid_rowconfigure(0, weight=1)     # Spatiu flexibil sus
+        self.main_content_frame.grid_rowconfigure(1, weight=0)     # Randul pentru continutul principal (camera si butoane)
+        self.main_content_frame.grid_rowconfigure(2, weight=1)     # Spatiu flexibil jos
         
-        cancel_btn = tk.Button(button_frame, text="Cancel", command=lambda: self.cancel_camera_window(camera_window), **CANCEL_BUTTON_STYLE)
-        cancel_btn.pack(side=tk.LEFT, padx=10)
-        
-        # Start video capture
-        self.capture = cv2.VideoCapture(CAMERA_URL)
-        if not self.capture.isOpened():
-            messagebox.showerror("Error", "Could not open camera")
-            camera_window.destroy()
+
+        camera_frame = tk.Frame(self.main_content_frame, bg=COLOR_PRIMARY_BG)
+        camera_frame.grid(row=1, column=0, padx=10, pady=10, sticky="nsew") 
+
+        self.add_user_camera_label = tk.Label(camera_frame, bg=camera_frame["bg"],
+                                                   width=DEFAULT_VIDEO_WIDTH, height=DEFAULT_VIDEO_HEIGHT)
+        self.add_user_camera_label.pack(expand=True, fill="both")
+
+        button_frame = tk.Frame(self.main_content_frame, bg=COLOR_PRIMARY_BG)
+
+        button_frame.grid(row=1, column=2, padx=30, pady=10, sticky="ns") 
+
+        tk.Button(button_frame, text="Capture", command=self.capture_photo_from_stream,
+                     **VERIFY_BUTTON_STYLE).pack(pady=10)
+        tk.Button(button_frame, text="Cancel", command=self.cancel_take_photo,
+                     **CANCEL_BUTTON_STYLE).pack(pady=10)
+
+        self.start_add_user_camera_stream()
+
+
+    def start_add_user_camera_stream(self):
+        # Release existing camera if open from previous use (e.g., main recognition)
+        if self.cap and self.cap.isOpened():
+            self.cap.release()
+            self.cap = None
+
+        self.camera_capture_active = True
+        self.cap = cv2.VideoCapture(CAMERA_URL)
+        if not self.cap.isOpened():
+            messagebox.showerror("Error", "Could not open camera for taking photo.")
+            self.camera_capture_active = False
+            self.update_video_label_placeholder(text="Camera Error", target_label=self.add_user_camera_label)
             return
-        
-        self.update_camera_preview(camera_window, video_label)
-    
-    def update_camera_preview(self, window, label):
-        ret, frame = self.capture.read()
+        self.update_add_user_camera_preview()
+
+    def update_add_user_camera_preview(self):
+        if not self.camera_capture_active or not self.add_user_camera_label.winfo_exists():
+            if self.cap and self.cap.isOpened():
+                self.cap.release()
+                self.cap = None
+            return
+
+        ret, frame = self.cap.read()
         if ret:
             frame = cv2.resize(frame, (DEFAULT_VIDEO_WIDTH, DEFAULT_VIDEO_HEIGHT))
             cv2image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             img = Image.fromarray(cv2image)
             imgtk = ImageTk.PhotoImage(image=img)
-            label.imgtk = imgtk
-            label.configure(image=imgtk)
+            self.add_user_camera_label.imgtk = imgtk
+            self.add_user_camera_label.configure(image=imgtk)
         
-        ## Not recursive, just scheduling the video lable update
-        if window.winfo_exists():
-            window.after(10, lambda: self.update_camera_preview(window, label))
+        self.root.after(10, self.update_add_user_camera_preview)
     
-    def capture_photo(self, window, label):
-        ret, frame = self.capture.read()
-        if ret:
-            # Save the captured image temporarily
-            temp_file = "temp_capture.jpg"
-            cv2.imwrite(temp_file, frame)
-            
-            # Process the captured image
-            self.process_chosen_image(temp_file)
-            os.remove(temp_file)
-            
-            # Clean up
-            window.destroy()
-            if self.capture.isOpened():
-                self.capture.release()
-                
-    def cancel_camera_window(self, window):
-        window.destroy()
-        if self.capture and self.capture.isOpened():
-            self.capture.release()
-            
+    def capture_photo_from_stream(self):
+        if self.cap and self.cap.isOpened():
+            ret, frame = self.cap.read()
+            if ret:
+                self.camera_capture_active = False # Stop the camera preview loop
+                if self.cap and self.cap.isOpened(): # Release camera immediately after capture
+                    self.cap.release()
+                    self.cap = None
 
+                temp_file = "temp_capture.jpg"
+                cv2.imwrite(temp_file, frame)
+                
+                # Process the captured image and get embedding
+                embedding, status_msg, status_color = get_embedding_from_image(
+                    temp_file, (DEFAULT_VIDEO_WIDTH, DEFAULT_VIDEO_HEIGHT))
+                self.temp_face_embedding = embedding
+                
+                os.remove(temp_file) # Clean up temp file
+
+                # Navigate back to add user screen and update status/button
+                self.add_user_screen()
+
+    def cancel_take_photo(self):
+        self.camera_capture_active = False
+        if self.cap and self.cap.isOpened():
+            self.cap.release()
+            self.cap = None
+        self.add_user_screen()
+        
+
+
+
+    def return_to_admin_options(self):
+        self.temp_name_var.set("")
+        self.temp_start_date_var.set("")
+        self.temp_end_date_var.set("")
+        self.temp_undef_var.set(False)
+        self.temp_face_embedding = None
+        if self.face_detection_status_label and self.face_detection_status_label.winfo_exists():
+            self.face_detection_status_label.config(text="No image selected.", fg=COLOR_TEXT_LIGHT)
+        if self.register_user_btn and self.register_user_btn.winfo_exists():
+            self.register_user_btn.config(state=tk.DISABLED)
+        
+        self.show_admin_options()
+        
+        
     def process_chosen_image(self, filepath=None):
         if filepath is None:
             filepath = filedialog.askopenfilename(filetypes=[("Image files", "*.jpg *.jpeg *.png")])
@@ -532,9 +608,9 @@ class AppUI:
             self.register_user_btn.config(state=tk.DISABLED)
 
     def register_user_data(self):
-        name = self.temp_name_entry.get().strip()
-        start = self.temp_start_entry.get().strip()
-        end = self.temp_end_entry.get().strip()
+        name = self.temp_name_var.get().strip()
+        start = self.temp_start_date_var.get().strip()
+        end = self.temp_end_date_var.get().strip()
         undef = self.temp_undef_var.get()
 
         success, message = self.user_manager.add_user(
@@ -543,10 +619,11 @@ class AppUI:
 
         if success:
             messagebox.showinfo("Success", message)
+            # Clear all temp data after successful registration
             self.temp_face_embedding = None
-            self.temp_name_entry.delete(0, tk.END)
-            self.temp_start_entry.delete(0, tk.END)
-            self.temp_end_entry.delete(0, tk.END)
+            self.temp_name_var.set("")
+            self.temp_start_date_var.set("")
+            self.temp_end_date_var.set("")
             self.temp_undef_var.set(False)
             if self.face_detection_status_label:
                 self.face_detection_status_label.config(text="No image selected.", fg=COLOR_TEXT_LIGHT)
