@@ -82,6 +82,15 @@ ADMIN_SETTINGS_BUTTON_STYLE = {
     "width": 15,
 }
 
+ADMIN_OPTION_EXIT_BUTTON_STYLE = {
+    **BASE_BUTTON_STYLE,
+    "bg": "#e74c3c",
+    "font": ("Arial", 16, "bold"),
+    "padx": 10,
+    "pady": 5,
+    "width": 15,
+}
+
 LOGIN_BUTTON_STYLE = {
     **BASE_BUTTON_STYLE,
     "bg": "#2ecc71",
