@@ -3,6 +3,8 @@ import cv2
 
 # --- File Paths ---
 EMBEDDINGS_FILE = "data/faces.npy"
+LOGO_FILE = "data\logo.png"
+PASSWORD_FILE = "data\password.dat"
 # Make sure these ONNX model files are in a 'models' directory
 FACE_DETECTION_MODEL = "models/face_detection_yunet_2023mar.onnx"
 FACE_RECOGNIZER_MODEL = "models/face_recognizer_fast.onnx"
@@ -107,6 +109,15 @@ CANCEL_BUTTON_STYLE = {
     "padx": 13,
     "pady": 7,
     "width": 7,
+}
+
+CANCEL_PHOTO_BUTTON_STYLE = {
+    **BASE_BUTTON_STYLE,
+    "bg": "#e74c3c", 
+    "font": ("Arial", 14, "bold"),
+    "padx": 13,
+    "pady": 7,
+    "width": 16,
 }
 
 ADMIN_OPTION_BUTTON_STYLE = {

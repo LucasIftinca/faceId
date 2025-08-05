@@ -28,8 +28,10 @@ from src.config import (
     CANCEL_BUTTON_STYLE, ADMIN_OPTION_BUTTON_STYLE, DELETE_BUTTON_STYLE,
     CHOOSE_IMAGE_BUTTON_STYLE, REGISTER_USER_BUTTON_STYLE, INPUT_FIELD_STYLE,
     LABEL_STYLE, ERROR_LABEL_STYLE, INFO_LABEL_STYLE, CHECKBOX_STYLE, LISTBOX_STYLE,
-    CAMERA_URL, VERIFY_TIMER, DEFAULT_PROCESS_WIDTH, DEFAULT_APP_WIDTH, DEFAULT_APP_HEIGHT, DEFAULT_PROCESS_FRAME_RATE, ADMIN_OPTION_EXIT_BUTTON_STYLE
+    CAMERA_URL, VERIFY_TIMER, DEFAULT_PROCESS_WIDTH, DEFAULT_APP_WIDTH, DEFAULT_APP_HEIGHT,
+    DEFAULT_PROCESS_FRAME_RATE, ADMIN_OPTION_EXIT_BUTTON_STYLE, CANCEL_PHOTO_BUTTON_STYLE, LOGO_FILE
 )
+from src.password_management import load_password,save_new_password, verify_password
 from src.embedding_control import reference_embeddings
 from src.face_recognition import detect_and_recognize_face, get_embedding_from_image
 from src.user_management import UserManagement
@@ -285,6 +287,12 @@ class AppUI:
         self.stop_recognition_and_video()
         self.clear_main_content_frame()
 
+        self.main_content_frame.grid_columnconfigure(0, weight=1)
+        self.main_content_frame.grid_columnconfigure(1, weight=1)
+        self.main_content_frame.grid_columnconfigure(2, weight=1)
+        self.main_content_frame.grid_rowconfigure(0, weight=1)
+        self.main_content_frame.grid_rowconfigure(1, weight=1)
+        
         self.temp_face_embedding = None
         self.temp_name_var.set("")
         self.temp_start_date_var.set("")
@@ -313,6 +321,15 @@ class AppUI:
         button_column_frame.grid_rowconfigure(1, weight=0)
         button_column_frame.grid_rowconfigure(2, weight=0)
         button_column_frame.grid_rowconfigure(3, weight=1)
+        
+
+        original_image = Image.open(LOGO_FILE)
+        resized_image = original_image.resize((150, 150), Image.LANCZOS)
+        self.logo_image = ImageTk.PhotoImage(resized_image)
+
+        self.logo_label = tk.Label(button_column_frame, image=self.logo_image, bg=button_column_frame["bg"])
+        self.logo_label.grid(row=0, column=0, pady=(20, 10), sticky="n")
+
 
         self.verify_button = tk.Button(button_column_frame, text="Verify", command=self.start_recognition,
                                          **VERIFY_BUTTON_STYLE)
@@ -352,15 +369,16 @@ class AppUI:
         tk.Button(login_frame, text="Cancel", command=self.back_to_main, **CANCEL_BUTTON_STYLE).pack(pady=10)
 
     def check_admin_password(self):
-        password = self.admin_password_entry.get().strip()
-        if password == ADMIN_PASSWORD:
+        check_password = self.admin_password_entry.get().strip()
+        correct_password = load_password()
+        if verify_password(check_password,correct_password):
             if self.login_error_label:
                 self.login_error_label.config(text="")
             self.show_admin_options()
         else:
             if self.login_error_label:
                 self.login_error_label.config(text="Incorrect password.")
-            self.admin_password_entry.delete(0, tk.END)
+            self.admin_password_entry.delete(0,tk.END)
 ################################################ ADMIN OPTIONS ################################################
     def show_admin_options(self):
             
@@ -386,7 +404,7 @@ class AppUI:
                     **ADMIN_OPTION_BUTTON_STYLE).pack(fill='x', pady=8)
         tk.Button(admin_buttons_frame, text="Delete User", command=self.delete_user_screen,
                     **ADMIN_OPTION_BUTTON_STYLE).pack(fill='x', pady=8)
-        tk.Button(admin_buttons_frame, text="Change Password",
+        tk.Button(admin_buttons_frame, text="Change Password", command=self.change_password_screen,
                     **ADMIN_OPTION_BUTTON_STYLE).pack(fill='x', pady=8)
         tk.Button(admin_buttons_frame, text="Exit Admin", command=self.back_to_main,
                     **ADMIN_OPTION_EXIT_BUTTON_STYLE).pack(fill='x', pady=20)
@@ -496,7 +514,7 @@ class AppUI:
         tk.Button(button_frame, text="Capture", command=self.capture_photo_from_stream,
                      **VERIFY_BUTTON_STYLE).pack(pady=10)
         tk.Button(button_frame, text="Cancel", command=self.cancel_take_photo,
-                     **CANCEL_BUTTON_STYLE).pack(pady=10)
+                     **CANCEL_PHOTO_BUTTON_STYLE).pack(pady=10)
 
         self.start_add_user_camera_stream()
 
@@ -619,6 +637,7 @@ class AppUI:
             self.show_admin_options()
         else:
             messagebox.showerror("Error", message)
+            
 ################################################ DELETE USER ################################################
     def delete_user_screen(self):
         self.stop_recognition_and_video()
@@ -679,6 +698,59 @@ class AppUI:
                 messagebox.showinfo("Cancelled", "User deletion cancelled.")
         else:
             messagebox.showwarning("No Selection", "Please select a user to delete.")
+
+################################################ CHANGE PASSWORD ################################################
+
+    def change_password_screen(self):
+            self.clear_main_content_frame()
+            if self.video_label and self.video_label.winfo_exists():
+                self.video_label.grid_forget()
+            self.update_status("Change Admin Password", COLOR_WARNING_ORANGE)
+
+            self.main_content_frame.grid_columnconfigure(0, weight=1)
+            self.main_content_frame.grid_columnconfigure(1, weight=1)
+            self.main_content_frame.grid_columnconfigure(2, weight=1)
+            self.main_content_frame.grid_rowconfigure(0, weight=1)
+
+            change_pass_frame = tk.Frame(self.main_content_frame, bg=COLOR_PRIMARY_BG)
+            change_pass_frame.grid(row=0, column=1, pady=20, sticky="nsew")
+
+            tk.Label(change_pass_frame, text="Enter New Password:", **LABEL_STYLE).pack(pady=(0, 5))
+            self.new_password_entry = tk.Entry(change_pass_frame, **INPUT_FIELD_STYLE, show='*')
+            self.new_password_entry.pack(ipadx=10, ipady=5)
+
+            tk.Label(change_pass_frame, text="Repeat New Password:", **LABEL_STYLE).pack(pady=(10, 5))
+            self.confirm_password_entry = tk.Entry(change_pass_frame, **INPUT_FIELD_STYLE, show='*')
+            self.confirm_password_entry.pack(ipadx=10, ipady=5)
+            
+            self.password_change_status_label = tk.Label(change_pass_frame, text="", **INFO_LABEL_STYLE)
+            self.password_change_status_label.pack(pady=(10, 0))
+
+            tk.Button(change_pass_frame, text="Save", command=self.save_new_admin_password,
+                    **LOGIN_BUTTON_STYLE).pack(pady=15)
+            tk.Button(change_pass_frame, text="Cancel", command=self.show_admin_options,
+                    **CANCEL_BUTTON_STYLE).pack(pady=10)
+
+    def save_new_admin_password(self):
+            new_pass = self.new_password_entry.get().strip()
+            confirm_pass = self.confirm_password_entry.get().strip()
+
+            if not new_pass or not confirm_pass:
+                self.password_change_status_label.config(text="Password fields cannot be empty.", fg=COLOR_ERROR_RED)
+                return
+
+            if new_pass != confirm_pass:
+                self.password_change_status_label.config(text="Passwords do not match.", fg=COLOR_ERROR_RED)
+                self.new_password_entry.delete(0, tk.END)
+                self.confirm_password_entry.delete(0, tk.END)
+                return
+
+            success = save_new_password(new_pass)
+            if success:
+                messagebox.showinfo("Success", "Password changed succesfully")
+                self.show_admin_options()
+            else:
+                self.password_change_status_label.config(text="Operation failed.", fg=COLOR_ERROR_RED)
 
 if __name__ == "__main__":
     root = tk.Tk()

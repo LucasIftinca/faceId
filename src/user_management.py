@@ -10,11 +10,11 @@ class UserManagement:
         if not name:
             return False, "Name is required."
         if embedding is None:
-            return False, "Face embedding is missing. Please detect a face."
+            return False, "Face data is missing.."
 
         if not undef_period:
             if not start_date_str or not end_date_str:
-                return False, "Start and End dates are required for a defined period."
+                return False, "Start and End dates are required."
             try:
                 start_date = datetime.strptime(start_date_str, "%Y-%m-%d")
                 end_date = datetime.strptime(end_date_str, "%Y-%m-%d")
@@ -42,5 +42,9 @@ class UserManagement:
             else:
                 display_text += f" ({data[1]} to {data[2]})" 
             users_display.append((name, display_text))
-        return users_display    
+        return users_display  
+
+######## CHANGE PASSWORD ########
+
+      
               
