@@ -7,7 +7,7 @@ import threading
 import time
 import os
 from datetime import datetime
-
+from tkcalendar import Calendar, DateEntry
 try:
     import RPi.GPIO as GPIO
     GPIO_PIN_OUTPUT = 17 # Pin 17
@@ -409,6 +409,7 @@ class AppUI:
         tk.Button(admin_buttons_frame, text="Exit Admin", command=self.back_to_main,
                     **ADMIN_OPTION_EXIT_BUTTON_STYLE).pack(fill='x', pady=20)
 ################################################ ADD USER ################################################
+
     def add_user_screen(self):
         self.stop_recognition_and_video() 
         self.clear_main_content_frame()
@@ -420,7 +421,7 @@ class AppUI:
         self.main_content_frame.grid_columnconfigure(0, weight=1)  
         self.main_content_frame.grid_columnconfigure(1, weight=0) 
         self.main_content_frame.grid_columnconfigure(2, weight=1)  
-        self.main_content_frame.grid_rowconfigure(0, weight=1)     
+        self.main_content_frame.grid_rowconfigure(0, weight=1)    
         add_user_form_frame = tk.Frame(self.main_content_frame, bg=COLOR_PRIMARY_BG)
 
         add_user_form_frame.grid(row=0, column=1, padx=20, pady=10, sticky="nsew") 
@@ -432,21 +433,23 @@ class AppUI:
 
         tk.Label(add_user_form_frame, text="Name:", **LABEL_STYLE).grid(row=row_idx, column=0, sticky="w", padx=5, pady=3)
         self.temp_name_entry = tk.Entry(add_user_form_frame, textvariable=self.temp_name_var, **INPUT_FIELD_STYLE)
-        self.temp_name_entry.grid(row=row_idx, column=1, sticky="ew", padx=5, pady=3) # Pastreaza "ew" pentru ca input-ul sa umple coloana 1 a formularului
+        self.temp_name_entry.grid(row=row_idx, column=1, sticky="ew", padx=5, pady=3)
         row_idx += 1
 
-        tk.Label(add_user_form_frame, text="Start Date (YYYY-MM-DD):", **LABEL_STYLE).grid(row=row_idx, column=0, sticky="w", padx=5, pady=3)
-        self.temp_start_entry = tk.Entry(add_user_form_frame, textvariable=self.temp_start_date_var, **INPUT_FIELD_STYLE)
+        tk.Label(add_user_form_frame, text="Start Date:", **LABEL_STYLE).grid(row=row_idx, column=0, sticky="w", padx=5, pady=3)
+        self.temp_start_entry = DateEntry(add_user_form_frame, **INPUT_FIELD_STYLE, date_pattern='yyyy-mm-dd',
+                                          textvariable=self.temp_start_date_var)
         self.temp_start_entry.grid(row=row_idx, column=1, sticky="ew", padx=5, pady=3)
         row_idx += 1
 
-        tk.Label(add_user_form_frame, text="End Date (YYYY-MM-DD):", **LABEL_STYLE).grid(row=row_idx, column=0, sticky="w", padx=5, pady=3)
-        self.temp_end_entry = tk.Entry(add_user_form_frame, textvariable=self.temp_end_date_var, **INPUT_FIELD_STYLE)
+        tk.Label(add_user_form_frame, text="End Date:", **LABEL_STYLE).grid(row=row_idx, column=0, sticky="w", padx=5, pady=3)
+        self.temp_end_entry = DateEntry(add_user_form_frame, **INPUT_FIELD_STYLE, date_pattern='yyyy-mm-dd',
+                                        textvariable=self.temp_end_date_var)
         self.temp_end_entry.grid(row=row_idx, column=1, sticky="ew", padx=5, pady=3)
         row_idx += 1
 
         undef_check = tk.Checkbutton(add_user_form_frame, text="Undefined Period", variable=self.temp_undef_var,
-                                         **CHECKBOX_STYLE)
+                                     **CHECKBOX_STYLE)
         undef_check.grid(row=row_idx, column=0, columnspan=2, pady=10, sticky="w") 
         row_idx += 1
 
@@ -454,7 +457,6 @@ class AppUI:
                      **CHOOSE_IMAGE_BUTTON_STYLE).grid(row=row_idx, column=0, columnspan=2, pady=5)
         
         row_idx += 1
-        
         
         tk.Button(add_user_form_frame, text="Take Photo", command=self.take_photo_screen,
                      **CHOOSE_IMAGE_BUTTON_STYLE).grid(row=row_idx, column=0, columnspan=2, pady=5)
@@ -470,11 +472,9 @@ class AppUI:
         register_button_frame.grid_columnconfigure(0, weight=1)
         register_button_frame.grid_columnconfigure(1, weight=1)
 
-
         self.register_user_btn = tk.Button(register_button_frame, text="Add User", command=self.register_user_data,
                                              **REGISTER_USER_BUTTON_STYLE)
         self.register_user_btn.pack(side=tk.LEFT, padx=5) 
-
 
         tk.Button(register_button_frame, text="Cancel", command=self.return_to_admin_options,
                      **CANCEL_BUTTON_STYLE).pack(side=tk.LEFT, padx=5) 
