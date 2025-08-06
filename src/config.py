@@ -3,7 +3,7 @@ import cv2
 
 # --- File Paths ---
 EMBEDDINGS_FILE = "data/faces.npy"
-LOGO_FILE = "data\logo.png"
+LOGO_FILE = "data/logo.png"
 PASSWORD_FILE = "data\password.dat"
 # Make sure these ONNX model files are in a 'models' directory
 FACE_DETECTION_MODEL = "models/face_detection_yunet_2023mar.onnx"

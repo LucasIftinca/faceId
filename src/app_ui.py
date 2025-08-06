@@ -324,7 +324,7 @@ class AppUI:
         
 
         original_image = Image.open(LOGO_FILE)
-        resized_image = original_image.resize((150, 150), Image.LANCZOS)
+        resized_image = original_image.resize((130, 120), Image.LANCZOS)
         self.logo_image = ImageTk.PhotoImage(resized_image)
 
         self.logo_label = tk.Label(button_column_frame, image=self.logo_image, bg=button_column_frame["bg"])
