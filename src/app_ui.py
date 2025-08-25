@@ -9,15 +9,15 @@ import os
 from datetime import datetime
 from tkcalendar import Calendar, DateEntry
 try:
-    import RPi.GPIO as GPIO
+    from gpiozero import OutputDevice
     GPIO_PIN_OUTPUT = 17 # Pin 17
     _gpio_enabled_at_startup = True
-    print(f"RPi.GPIO imported. GPIO control enabled on pin {GPIO_PIN_OUTPUT}.")
+    print(f"GPIOZero imported. GPIO control enabled on pin {GPIO_PIN_OUTPUT}.")
 except ImportError:
-    print("RPi.GPIO not found. GPIO control disabled.")
+    print("GPIOZero not found. GPIO control disabled.")
     _gpio_enabled_at_startup = False
 except Exception as e:
-    print(f"Error importing RPi.GPIO: {e}. GPIO control disabled.")
+    print(f"Error importing GPIOZero: {e}. GPIO control disabled.")
     _gpio_enabled_at_startup = False
 
 from src.config import (
@@ -77,12 +77,10 @@ class AppUI:
         self.gpio_enabled = _gpio_enabled_at_startup
         if self.gpio_enabled:
             try:
-                GPIO.setmode(GPIO.BCM)
-                GPIO.setup(GPIO_PIN_OUTPUT, GPIO.OUT)
-                GPIO.output(GPIO_PIN_OUTPUT, GPIO.LOW)
-                print(f"GPIO pin {GPIO_PIN_OUTPUT} set up as output and set to LOW.")
+                self.gpio_pin = OutputDevice(GPIO_PIN_OUTPUT)
+                print(f"GPIO pin {GPIO_PIN_OUTPUT} initialized as OutputDevice.")
             except Exception as e:
-                print(f"Failed to set up GPIO: {e}. GPIO control disabled.")
+                print(f"Failed to set up GPIOZero OutputDevice: {e}. GPIO control disabled.")
                 self.gpio_enabled = False
 
         self.video_label = None
@@ -136,9 +134,9 @@ class AppUI:
 
         if self.gpio_enabled:
             try:
-                GPIO.output(GPIO_PIN_OUTPUT, GPIO.LOW)
+                self.gpio_pin.off()
             except Exception as e:
-                print(f"Error setting GPIO LOW during cleanup: {e}")
+                print(f"Error setting GPIO OFF during cleanup: {e}")
 
         self.recognition_running = False
         self.stop_flag = False
@@ -198,7 +196,7 @@ class AppUI:
                         current_status_color = COLOR_SUCCESS_GREEN
                         if self.gpio_enabled and not gpio_high_active:
                             try:
-                                GPIO.output(GPIO_PIN_OUTPUT, GPIO.HIGH)
+                                self.gpio_pin.on()
                                 gpio_high_active = True
                             except Exception as e:
                                 print(f"Error setting GPIO HIGH: {e}")
@@ -207,7 +205,7 @@ class AppUI:
                         current_status_color = COLOR_ERROR_RED
                         if self.gpio_enabled and gpio_high_active:
                             try:
-                                GPIO.output(GPIO_PIN_OUTPUT, GPIO.LOW)
+                                self.gpio_pin.off()
                                 gpio_high_active = False
                             except Exception as e:
                                 print(f"Error setting GPIO LOW: {e}")
@@ -270,11 +268,6 @@ class AppUI:
         self.stop_recognition_and_video()
         if self.recognition_thread and self.recognition_thread.is_alive():
             self.recognition_thread.join(timeout=1.0)
-        if self.gpio_enabled:
-            try:
-                GPIO.cleanup()
-            except Exception as e:
-                print(f"Error during GPIO cleanup: {e}")
         self.root.destroy()
 
     def clear_main_content_frame(self):
