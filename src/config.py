@@ -1,13 +1,17 @@
-import cv2
+import os 
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(BASE_DIR, "data")
+MODELS_DIR = os.path.join(BASE_DIR, "models")
 
 # --- File Paths ---
-EMBEDDINGS_FILE = "data/faces.npy"
-LOGO_FILE = "data/logo.png"
-PASSWORD_FILE = "data\password.dat"
-# Make sure these ONNX model files are in a 'models' directory
-FACE_DETECTION_MODEL = "models/face_detection_yunet_2023mar.onnx"
-FACE_RECOGNIZER_MODEL = "models/face_recognizer_fast.onnx"
+EMBEDDINGS_FILE = os.path.join(DATA_DIR, "faces.npy")
+LOGO_FILE = os.path.join(DATA_DIR, "logo.png")
+PASSWORD_FILE = os.path.join(DATA_DIR, "password.dat")
+
+# --- Models ---
+FACE_DETECTION_MODEL = os.path.join(MODELS_DIR, "face_detection_yunet_2023mar.onnx")
+FACE_RECOGNIZER_MODEL = os.path.join(MODELS_DIR, "face_recognizer_fast.onnx")
 
 # --- Interface Settings ---
 DEFAULT_APP_WIDTH = 790
