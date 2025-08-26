@@ -10,7 +10,7 @@ def load_embeddings():
     global reference_embeddings
     if os.path.exists(EMBEDDINGS_FILE):
         try:
-            reference_embeddings = np.load(EMBEDDINGS_FILE, allow_pickle=True).item()
+            reference_embeddings = np.load(EMBEDDINGS_FILE, allow_pickle=True).item() # Load the dictionary of embeddings from the file
         except Exception as e:
             print(f"Error loading embeddings: {e}. Initializing with empty dictionary.")
             reference_embeddings = {}
@@ -21,32 +21,30 @@ def load_embeddings():
 ##### SAVING EMBEDDINGS ######
 def save_embeddings():
     try:
-        np.save(EMBEDDINGS_FILE, reference_embeddings)
+        np.save(EMBEDDINGS_FILE, reference_embeddings) # Save the current embeddings dictionary to a file
         print(f"Saved {len(reference_embeddings)} embeddings.")
     except Exception as e:
         print(f"Error saving embeddings: {e}")
 
- 
 def get_all_user_names():
-    return list(reference_embeddings.keys())
+    return list(reference_embeddings.keys()) # Return a list of all user names
 
 def get_user_data(name):
-    return reference_embeddings.get(name)
+    return reference_embeddings.get(name) # Return the data for a specific user
 
 def get_all_users_data():
-    return reference_embeddings.copy()
+    return reference_embeddings.copy() # Return a copy to prevent external modifications
 
 def add_embedding(name, embedding, start_date, end_date, undef_period):
-    reference_embeddings[name] = [embedding, start_date, end_date, undef_period]
-    save_embeddings()
-
+    reference_embeddings[name] = [embedding, start_date, end_date, undef_period] # Add a new user with their data
+    save_embeddings() # Save the changes to the file
 
 def remove_embedding(name):
     if name in reference_embeddings:
-        del reference_embeddings[name]
-        save_embeddings()
+        del reference_embeddings[name] # Delete the user's data
+        save_embeddings() # Save the changes to the file
         return True
     return False
 
 # Initialize embeddings on module load
-load_embeddings()
+load_embeddings() # Load existing data when the module is imported

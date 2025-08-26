@@ -40,8 +40,8 @@ class AppUI:
     def __init__(self, root):
         self.root = root
         self.root.title("Access Control System")
-        self.root.geometry(f"{DEFAULT_APP_WIDTH}x{DEFAULT_APP_HEIGHT}")
-        self.root.configure(bg=COLOR_PRIMARY_BG)
+        self.root.state('zoomed') # Maximize the window
+        self.root.configure(bg=COLOR_PRIMARY_BG) # Set the background color
 
         self.status_label = tk.Label(self.root, **STATUS_LABEL_STYLE)
         self.status_label.pack(pady=(10, 10))
@@ -50,55 +50,55 @@ class AppUI:
         self.main_content_frame = tk.Frame(self.root, bg=COLOR_PRIMARY_BG)
         self.main_content_frame.pack(expand=True, fill="both", padx=10, pady=5)
 
-        self.recognition_running = False
-        self.recognition_thread = None
-        self.stop_flag = False
-        self.cap = None
-        self.verification_timer = None
+        self.recognition_running = False # Flag to check if the recognition loop is active
+        self.recognition_thread = None # Thread for the recognition loop
+        self.stop_flag = False # Flag to stop the recognition thread
+        self.cap = None # OpenCV video capture object
+        self.verification_timer = None # Timer to stop the recognition after a period
 
         self.verify_button = None
 
-        self.temp_face_embedding = None
+        self.temp_face_embedding = None # Stores the face embedding from image for new user registration
         
-        self.temp_name_var = tk.StringVar(value="") 
+        self.temp_name_var = tk.StringVar(value="") # Stores user name for registration
         self.temp_start_date_var = tk.StringVar(value="")
         self.temp_end_date_var = tk.StringVar(value="")
         self.temp_undef_var = tk.BooleanVar()
 
         self.face_detection_status_label = None
         self.register_user_btn = None
-        self.add_user_form_data = {} 
+        self.add_user_form_data = {}
 
         self.admin_password_entry = None
         self.login_error_label = None
 
-        self.user_manager = UserManagement()
+        self.user_manager = UserManagement() # Instantiate the user management class
 
-        self.gpio_enabled = _gpio_enabled_at_startup
+        self.gpio_enabled = _gpio_enabled_at_startup # Check if GPIO is enabled at startup
         if self.gpio_enabled:
             try:
-                self.gpio_pin = OutputDevice(GPIO_PIN_OUTPUT)
+                self.gpio_pin = OutputDevice(GPIO_PIN_OUTPUT) # Initialize GPIO pin as an output device
                 print(f"GPIO pin {GPIO_PIN_OUTPUT} initialized as OutputDevice.")
             except Exception as e:
                 print(f"Failed to set up GPIOZero OutputDevice: {e}. GPIO control disabled.")
                 self.gpio_enabled = False
 
         self.video_label = None
-        self.add_user_camera_label = None 
-        self.camera_capture_active = False 
+        self.add_user_camera_label = None # Label for the camera feed in the admin panel
+        self.camera_capture_active = False # Flag to indicate if camera capture is active
 
-        self.back_to_main()
+        self.back_to_main() # Start the main UI
         
-        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+        self.root.protocol("WM_DELETE_WINDOW", self.on_closing) # Handle window close event
 
     def update_status(self, text, color):
         if self.status_label:
             if text != self.status_label.cget("text") or color != self.status_label.cget("fg"):
-                self.status_label.config(text=text, fg=color)
+                self.status_label.config(text=text, fg=color) # Update the status label's text and color
 
     def hex_to_rgb(self, hex_color):
         hex_color = hex_color.lstrip('#')
-        return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+        return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4)) # Convert a HEX color to an RGB tuple
 
     def update_video_label_placeholder(self, text="Waiting . . .", target_label=None):
         if target_label is None:
@@ -107,9 +107,9 @@ class AppUI:
         if target_label is None or not target_label.winfo_exists():
             return
 
-        blank_img = np.zeros((DEFAULT_VIDEO_HEIGHT, DEFAULT_VIDEO_WIDTH, 3), dtype=np.uint8)
+        blank_img = np.zeros((DEFAULT_VIDEO_HEIGHT, DEFAULT_VIDEO_WIDTH, 3), dtype=np.uint8) # Create a black image
         bgr_color = self.hex_to_rgb(COLOR_PRIMARY_BG)[::-1]
-        blank_img[:,:] = bgr_color
+        blank_img[:,:] = bgr_color # Fill the image with the background color
 
         font = cv2.FONT_HERSHEY_SIMPLEX
         font_scale = 0.9
@@ -120,7 +120,7 @@ class AppUI:
         text_x = (DEFAULT_VIDEO_WIDTH - text_size[0]) // 2
         text_y = (DEFAULT_VIDEO_HEIGHT + text_size[1]) // 2
 
-        cv2.putText(blank_img, text, (text_x, text_y), font, font_scale, text_color, font_thickness, cv2.LINE_AA)
+        cv2.putText(blank_img, text, (text_x, text_y), font, font_scale, text_color, font_thickness, cv2.LINE_AA) # Add text to the image
 
         img = Image.fromarray(blank_img)
         imgtk = ImageTk.PhotoImage(image=img)
@@ -129,12 +129,12 @@ class AppUI:
 
     def _cleanup_recognition_state(self, status_text="Idle", status_color=COLOR_IDLE_GRAY):
         if self.cap and self.cap.isOpened():
-            self.cap.release()
+            self.cap.release() # Release the camera
         self.cap = None
 
         if self.gpio_enabled:
             try:
-                self.gpio_pin.off()
+                self.gpio_pin.off() # Turn off the GPIO pin
             except Exception as e:
                 print(f"Error setting GPIO OFF during cleanup: {e}")
 
@@ -144,20 +144,18 @@ class AppUI:
         self.root.after(0, self.update_status, status_text, status_color)
 
         if self.verify_button and self.verify_button.winfo_exists():
-            self.root.after(0, lambda: self.verify_button.config(state=tk.NORMAL))
+            self.root.after(0, lambda: self.verify_button.config(state=tk.NORMAL)) # Enable the verify button
 
         if self.verification_timer:
-            self.root.after_cancel(self.verification_timer)
+            self.root.after_cancel(self.verification_timer) # Cancel the verification timer
             self.verification_timer = None
             
-        
-
     def recognize_loop(self):
         gpio_high_active = False
 
         try:
             if self.cap is None or not self.cap.isOpened():
-                self.cap = cv2.VideoCapture(CAMERA_URL)
+                self.cap = cv2.VideoCapture(CAMERA_URL) # Open the video capture
                 if not self.cap.isOpened():
                     raise RuntimeError("Failed to open camera.")
 
@@ -189,14 +187,14 @@ class AppUI:
                         scale_factor_y = DEFAULT_VIDEO_HEIGHT / PROCESS_HEIGHT
                         x, y, w, h = detected_bbox_scaled
                         bbox = (int(x * scale_factor_x), int(y * scale_factor_y),
-                                int(w * scale_factor_x), int(h * scale_factor_y))
+                                int(w * scale_factor_x), int(h * scale_factor_y)) # Scale the bounding box to display size
 
                     if recognized_name:
                         current_status_text = f"Unlocked: {recognized_name}"
                         current_status_color = COLOR_SUCCESS_GREEN
                         if self.gpio_enabled and not gpio_high_active:
                             try:
-                                self.gpio_pin.on()
+                                self.gpio_pin.on() # Turn on the GPIO pin
                                 gpio_high_active = True
                             except Exception as e:
                                 print(f"Error setting GPIO HIGH: {e}")
@@ -205,7 +203,7 @@ class AppUI:
                         current_status_color = COLOR_ERROR_RED
                         if self.gpio_enabled and gpio_high_active:
                             try:
-                                self.gpio_pin.off()
+                                self.gpio_pin.off() # Turn off the GPIO pin
                                 gpio_high_active = False
                             except Exception as e:
                                 print(f"Error setting GPIO LOW: {e}")
@@ -215,15 +213,15 @@ class AppUI:
                 if bbox:
                     x, y, w, h = bbox
                     if recognized_name:
-                        cv2.rectangle(frame_display, (x, y), (x + w, y + h), (0, 255, 0), 2)
+                        cv2.rectangle(frame_display, (x, y), (x + w, y + h), (0, 255, 0), 2) # Draw a green rectangle for recognized faces
                     else:
-                        cv2.rectangle(frame_display, (x, y), (x + w, y + h), (0, 0, 255), 2)
+                        cv2.rectangle(frame_display, (x, y), (x + w, y + h), (0, 0, 255), 2) # Draw a red rectangle for unrecognized faces
                 
                 img = cv2.cvtColor(frame_display, cv2.COLOR_BGR2RGB)
                 img = Image.fromarray(img)
                 imgtk = ImageTk.PhotoImage(image=img)
 
-                self.root.after(0, lambda: self.video_label.config(image=imgtk))
+                self.root.after(0, lambda: self.video_label.config(image=imgtk)) # Update the image on the video label
                 self.root.after(0, lambda: setattr(self.video_label, '_imgtk', imgtk))
 
                 time.sleep(0.01)
@@ -243,14 +241,14 @@ class AppUI:
             self.verification_timer = None
 
         if self.verify_button:
-            self.verify_button.config(state=tk.DISABLED)
+            self.verify_button.config(state=tk.DISABLED) # Disable the button to prevent multiple clicks
 
         self.stop_flag = False
-        self.recognition_thread = threading.Thread(target=self.recognize_loop, daemon=True)
+        self.recognition_thread = threading.Thread(target=self.recognize_loop, daemon=True) # Start the recognition loop in a new thread
         self.recognition_thread.start()
         self.recognition_running = True
         self.update_status("Initializing camera...", COLOR_IDLE_GRAY)
-        self.verification_timer = self.root.after(VERIFY_TIMER, self.stop_recognition_and_video)
+        self.verification_timer = self.root.after(VERIFY_TIMER, self.stop_recognition_and_video) # Set a timer to stop the recognition automatically
 
     def stop_recognition_and_video(self):
         if not self.recognition_running and not self.stop_flag and not self.camera_capture_active:
@@ -260,19 +258,18 @@ class AppUI:
         self.update_status("Stopping recognition...", COLOR_IDLE_GRAY)
 
         if self.cap and self.cap.isOpened():
-            self.cap.release()
+            self.cap.release() # Release the camera capture
             self.cap = None
 
-
     def on_closing(self):
-        self.stop_recognition_and_video()
+        self.stop_recognition_and_video() # Stop camera and thread before closing
         if self.recognition_thread and self.recognition_thread.is_alive():
-            self.recognition_thread.join(timeout=1.0)
-        self.root.destroy()
+            self.recognition_thread.join(timeout=1.0) # Wait for the thread to finish
+        self.root.destroy() # Destroy the main window
 
     def clear_main_content_frame(self):
         for widget in self.main_content_frame.winfo_children():
-            if widget != self.video_label: 
+            if widget != self.video_label: # Do not clear the video label
                 widget.destroy()
 
 ################################################ MAIN SCREEN ################################################

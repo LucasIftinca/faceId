@@ -17,7 +17,7 @@ except Exception as e:
 def detect_and_recognize_face(frame, reference_embeddings, input_size):
     
     if face_detector is None or face_recognizer is None:
-        print("Models not loaded, cannot perform recognition.")        
+        print("Models not loaded, cannot perform recognition.")
         return None, None
     
 ############### Face detection ################
@@ -28,34 +28,29 @@ def detect_and_recognize_face(frame, reference_embeddings, input_size):
         return None, None 
 
     faces_np = np.array(faces)
-    # Filter out invalid faces (width or height <= 0)
-    valid_faces = faces_np[np.where((faces_np[:, 2] > 0) & (faces_np[:, 3] > 0))]
+    valid_faces = faces_np[np.where((faces_np[:, 2] > 0) & (faces_np[:, 3] > 0))] # Filter out invalid faces
 
-    # In case there are no faces
     if len(valid_faces) == 0:
         return None, None 
 
-    # Extract largest face
     areas = valid_faces[:, 2] * valid_faces[:, 3]
-    largest_face = valid_faces[np.argsort(areas)[::-1][0]]
+    largest_face = valid_faces[np.argsort(areas)[::-1][0]] # Get the largest face by area
 
-    # Coordonates for match box
-    bbox = tuple(map(int, largest_face[:4])) # x, y, w, h
+    bbox = tuple(map(int, largest_face[:4])) # x, y, w, h # Convert coordinates to a tuple of integers
 
-    # Align and get feature for recognition
     aligned_face = face_recognizer.alignCrop(frame, largest_face)
     
 ################ Face recognition ###############
-    feature = face_recognizer.feature(aligned_face)
+    feature = face_recognizer.feature(aligned_face) # Extract the face embedding
 
 ################ Face matching ##################
     recognized_name = None
     for name, data in reference_embeddings.items():
-        ref_emb = data[0] # Embedding at index 0
-        score = face_recognizer.match(feature, ref_emb, cv2.FaceRecognizerSF_FR_COSINE)
+        ref_emb = data[0] 
+        score = face_recognizer.match(feature, ref_emb, cv2.FaceRecognizerSF_FR_COSINE) # Compare embeddings using cosine similarity
         if score >= COSINE_THRESHOLD:
             recognized_name = name
-            break # Stopping after finding a match
+            break 
 
     return recognized_name, bbox
 
@@ -84,11 +79,10 @@ def get_embedding_from_image(filepath, input_size):
     if len(valid_faces) == 0:
         return None, "No valid face detected.", "red"
 
-    # Getting the largest face
     areas = valid_faces[:, 2] * valid_faces[:, 3]
     largest_face = valid_faces[np.argsort(areas)[::-1][0]]
 
     aligned_face = face_recognizer.alignCrop(img_resized, largest_face)
-    embedding = face_recognizer.feature(aligned_face)
+    embedding = face_recognizer.feature(aligned_face) # Extract the face embedding
 
     return embedding, "Face loaded.", "green"

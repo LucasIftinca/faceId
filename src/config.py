@@ -30,7 +30,6 @@ DEFAULT_VIDEO_HEIGHT = 210
 DEFAULT_PROCESS_WIDTH = 320
 CAMERA_URL = 0
 #CAMERA_URL = r"rtsp://admin:adminadmin1@192.168.1.108:554/cam/realmonitor?channel=1&subtype=1"
-#CAMERA_URL = "http://192.168.1.133:4747/video"
 
 # --- Admin Settings ---
 ADMIN_PASSWORD = "1234"
@@ -45,13 +44,13 @@ COLOR_IDLE_GRAY = "gray"
 COLOR_INFO_BLUE = "#429ee9"         
 
 DATE_DISPLAY_LABEL_STYLE = {
-    "bg": "#9497f1",  # Background color for date display labels
+    "bg": "#9497f1",  
     "fg": COLOR_TEXT_LIGHT,
     "font": ("Helvetica", 12),
     "relief": "solid",
     "borderwidth": 1,
-    "width": 12, # A fixed width can help with alignment
-    "anchor": "w" # Align text to the west (left)
+    "width": 12, 
+    "anchor": "w"
 }
 
 # General button style
@@ -162,7 +161,7 @@ REGISTER_USER_BUTTON_STYLE = {
 INPUT_FIELD_STYLE = {
     "bg": "#2a2a2a",
     "fg": "#f0f0f0",
-    "insertbackground": "#f0f0f0", # Cursor color
+    "insertbackground": "#f0f0f0", 
     "bd": 1,
     "relief": "solid",
     "font": ("Arial", 14)
