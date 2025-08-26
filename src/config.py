@@ -28,8 +28,8 @@ VERIFY_TIMER = 7000
 DEFAULT_VIDEO_WIDTH = 260
 DEFAULT_VIDEO_HEIGHT = 210
 DEFAULT_PROCESS_WIDTH = 320
-CAMERA_URL = 0
-#CAMERA_URL = r"rtsp://admin:adminadmin1@192.168.1.108:554/cam/realmonitor?channel=1&subtype=1"
+#CAMERA_URL = 0
+CAMERA_URL = r"rtsp://admin:adminadmin1@192.168.1.108:554/cam/realmonitor?channel=1&subtype=1"
 
 # --- Admin Settings ---
 ADMIN_PASSWORD = "1234"

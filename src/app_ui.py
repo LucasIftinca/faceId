@@ -8,6 +8,7 @@ import time
 import os
 from datetime import datetime
 from tkcalendar import Calendar, DateEntry
+
 try:
     from gpiozero import OutputDevice
     GPIO_PIN_OUTPUT = 17 # Pin 17
@@ -19,6 +20,7 @@ except ImportError:
 except Exception as e:
     print(f"Error importing GPIOZero: {e}. GPIO control disabled.")
     _gpio_enabled_at_startup = False
+
 
 from src.config import (
     ADMIN_PASSWORD, COLOR_PRIMARY_BG, COLOR_TEXT_LIGHT, COLOR_ERROR_RED,
@@ -40,7 +42,7 @@ class AppUI:
     def __init__(self, root):
         self.root = root
         self.root.title("Access Control System")
-        self.root.attributes('-zoomed',True)
+        self.root.attributes('-zoomed', True) 
         self.root.configure(bg=COLOR_PRIMARY_BG) # Set the background color
 
         self.status_label = tk.Label(self.root, **STATUS_LABEL_STYLE)
@@ -127,29 +129,6 @@ class AppUI:
         target_label.config(image=imgtk)
         target_label.image = imgtk
 
-    def _cleanup_recognition_state(self, status_text="Idle", status_color=COLOR_IDLE_GRAY):
-        if self.cap and self.cap.isOpened():
-            self.cap.release() # Release the camera
-        self.cap = None
-
-        if self.gpio_enabled:
-            try:
-                self.gpio_pin.off() # Turn off the GPIO pin
-            except Exception as e:
-                print(f"Error setting GPIO OFF during cleanup: {e}")
-
-        self.recognition_running = False
-        self.stop_flag = False
-        self.root.after(0, self.update_video_label_placeholder)
-        self.root.after(0, self.update_status, status_text, status_color)
-
-        if self.verify_button and self.verify_button.winfo_exists():
-            self.root.after(0, lambda: self.verify_button.config(state=tk.NORMAL)) # Enable the verify button
-
-        if self.verification_timer:
-            self.root.after_cancel(self.verification_timer) # Cancel the verification timer
-            self.verification_timer = None
-            
     def recognize_loop(self):
         gpio_high_active = False
 
@@ -227,11 +206,34 @@ class AppUI:
                 time.sleep(0.01)
 
         except RuntimeError as e:
-            self.root.after(0, self._cleanup_recognition_state, str(e), COLOR_ERROR_RED)
+            # Let the finally block handle cleanup
+            self.root.after(0, self.update_status, str(e), COLOR_ERROR_RED)
         except Exception as e:
-            self.root.after(0, self._cleanup_recognition_state, f"Error: {e}", COLOR_ERROR_RED)
+            # Let the finally block handle cleanup
+            print(f"Error in recognize_loop: {e}")
         finally:
-            self.root.after(0, self._cleanup_recognition_state)
+            # The cleanup happens in the recognition thread itself.
+            if self.cap and self.cap.isOpened():
+                self.cap.release()
+            self.cap = None
+
+            if self.gpio_enabled:
+                try:
+                    self.gpio_pin.off()
+                except Exception as e:
+                    print(f"Error setting GPIO OFF during cleanup: {e}")
+
+            self.recognition_running = False
+            self.stop_flag = False
+            self.root.after(0, self.update_video_label_placeholder)
+            self.root.after(0, self.update_status, "Idle", COLOR_IDLE_GRAY)
+            
+            if self.verify_button and self.verify_button.winfo_exists():
+                self.root.after(0, lambda: self.verify_button.config(state=tk.NORMAL))
+            
+            if self.verification_timer:
+                self.root.after_cancel(self.verification_timer)
+                self.verification_timer = None
 
     def start_recognition(self):
         if self.recognition_running:
@@ -249,23 +251,21 @@ class AppUI:
         self.recognition_running = True
         self.update_status("Initializing camera...", COLOR_IDLE_GRAY)
         self.verification_timer = self.root.after(VERIFY_TIMER, self.stop_recognition_and_video) # Set a timer to stop the recognition automatically
-
+        
     def stop_recognition_and_video(self):
-        if not self.recognition_running and not self.stop_flag and not self.camera_capture_active:
+        # This function just signals that the loop should stop
+        if not self.recognition_running:
             return
         self.stop_flag = True
         self.camera_capture_active = False
         self.update_status("Stopping recognition...", COLOR_IDLE_GRAY)
-
-        if self.cap and self.cap.isOpened():
-            self.cap.release() # Release the camera capture
-            self.cap = None
-
+    
     def on_closing(self):
-        self.stop_recognition_and_video() # Stop camera and thread before closing
+        # Call stop and wait for the recognition thread to finish
+        self.stop_recognition_and_video()
         if self.recognition_thread and self.recognition_thread.is_alive():
-            self.recognition_thread.join(timeout=1.0) # Wait for the thread to finish
-        self.root.destroy() # Destroy the main window
+            self.recognition_thread.join(timeout=3.0) # Wait up to 3 seconds
+        self.root.destroy()
 
     def clear_main_content_frame(self):
         for widget in self.main_content_frame.winfo_children():
