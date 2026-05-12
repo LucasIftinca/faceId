@@ -28,20 +28,25 @@ VERIFY_TIMER = 7000
 DEFAULT_VIDEO_WIDTH = 260
 DEFAULT_VIDEO_HEIGHT = 210
 DEFAULT_PROCESS_WIDTH = 320
-#CAMERA_URL = 0
-CAMERA_URL = r"rtsp://admin:adminadmin1@192.168.1.108:554/cam/realmonitor?channel=1&subtype=1"
+CAMERA_URL = 0
+#CAMERA_URL = r"rtsp://admin:adminadmin1@192.168.1.108:554/cam/realmonitor?channel=1&subtype=1"
 
 # --- Admin Settings ---
 ADMIN_PASSWORD = "1234"
 
 # --- Colors ---
-COLOR_PRIMARY_BG = "#1a1a1a"      
-COLOR_TEXT_LIGHT = "#f0f0f0"       
+COLOR_PRIMARY_BG = "#1a1a1a"
+COLOR_TEXT_LIGHT = "#f0f0f0"
+COLOR_TEXT_BLACK = "#000000"
 COLOR_SUCCESS_GREEN = "#2ecc71"    
 COLOR_ERROR_RED = "#e74c3c"        
 COLOR_WARNING_ORANGE = "orange"         
 COLOR_IDLE_GRAY = "gray"   
-COLOR_INFO_BLUE = "#429ee9"         
+COLOR_INFO_BLUE = "#429ee9"
+COLOR_BLACK = "#000000"
+COLOR_DARK_GREY = "#1a1a1a"
+COLOR_WHITE = "#ffffff"
+COLOR_BLUE = "#007AFF"
 
 DATE_DISPLAY_LABEL_STYLE = {
     "bg": "#9497f1",  
@@ -55,7 +60,7 @@ DATE_DISPLAY_LABEL_STYLE = {
 
 # General button style
 BASE_BUTTON_STYLE = {
-    "fg": "#f0f0f0",
+    "fg": COLOR_BLACK,
     "font": ("Arial", 12, "bold"),
     "relief": "flat",
     "borderwidth": 0,
@@ -70,13 +75,13 @@ BASE_BUTTON_STYLE = {
 
 VERIFY_BUTTON_STYLE = {
     **BASE_BUTTON_STYLE,
-    "bg": "#2ecc71",
+    "bg": COLOR_BLUE,
     "font": ("Arial", 16, "bold"),
     "padx": 15,
     "pady": 8,
     "width": 15,
     "height": 2,
-    "activebackground": "#218838", 
+    "highlightbackground": COLOR_BLUE,
 }
 
 ADMIN_SETTINGS_BUTTON_STYLE = {
@@ -168,14 +173,15 @@ INPUT_FIELD_STYLE = {
 }
 
 LABEL_STYLE = {
-    "bg": "#1a1a1a",
-    "fg": "#f0f0f0",
+    "bg": COLOR_DARK_GREY,
+    "fg": COLOR_WHITE,
     "font": ("Arial", 14, "bold")
 }
 
 STATUS_LABEL_STYLE = {
     "font": ("Arial", 20, "bold"),
     "bg": "#1a1a1a",
+    "fg": COLOR_TEXT_BLACK
 }
 
 ERROR_LABEL_STYLE = {

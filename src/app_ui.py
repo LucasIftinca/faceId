@@ -42,7 +42,7 @@ class AppUI:
     def __init__(self, root):
         self.root = root
         self.root.title("Access Control System")
-        self.root.attributes('-zoomed', True) 
+        self.root.attributes('-fullscreen', True)
         self.root.configure(bg=COLOR_PRIMARY_BG) # Set the background color
 
         self.status_label = tk.Label(self.root, **STATUS_LABEL_STYLE)
