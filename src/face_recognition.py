@@ -3,8 +3,10 @@ import numpy as np
 from src.config import FACE_DETECTION_MODEL, FACE_RECOGNIZER_MODEL, COSINE_THRESHOLD
 
 # Threshold for how much the depth data deviates from a perfect flat plane.
-# Tilted phones usually score under 10-15. Real faces score much higher due to the nose/eyes.
-DEPTH_RESIDUAL_THRESHOLD = 20.0
+# Tilted phones usually score under 10-15 on Kinect.
+# NOTE: If using ZED camera (OpenCV Stereo Map), make this value 40.0. If using Kinect, make this value 20.0
+# depending on the output scale of the disparity array.
+DEPTH_RESIDUAL_THRESHOLD = 40.0
 
 # Models loaded for once and globally
 try:
@@ -57,7 +59,7 @@ def detect_and_recognize_face(frame, depth_frame, reference_embeddings, input_si
             # 1. Filter out 0 values (Kinect infrared blind spots)
             valid_mask = face_depth_region > 0
 
-            # If the Kinect can't read the depth (e.g. holding a glossy phone screen that reflects IR away)
+            # If the camera can't read the depth (e.g. holding a glossy phone screen that reflects IR away)
             if np.sum(valid_mask) < 0.3 * face_depth_region.size:
                 print("Spoof detected: Cannot read depth (reflective surface).")
                 return "Spoof Detected", bbox

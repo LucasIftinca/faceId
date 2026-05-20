@@ -32,7 +32,8 @@ from src.config import (
     CHOOSE_IMAGE_BUTTON_STYLE, REGISTER_USER_BUTTON_STYLE, INPUT_FIELD_STYLE,
     LABEL_STYLE, ERROR_LABEL_STYLE, INFO_LABEL_STYLE, CHECKBOX_STYLE, LISTBOX_STYLE,
     CAMERA_URL, VERIFY_TIMER, DEFAULT_PROCESS_WIDTH, DEFAULT_APP_WIDTH, DEFAULT_APP_HEIGHT,
-    DEFAULT_PROCESS_FRAME_RATE, ADMIN_OPTION_EXIT_BUTTON_STYLE, CANCEL_PHOTO_BUTTON_STYLE, LOGO_FILE
+    DEFAULT_PROCESS_FRAME_RATE, ADMIN_OPTION_EXIT_BUTTON_STYLE, CANCEL_PHOTO_BUTTON_STYLE, LOGO_FILE,
+    CAMERA_TYPE
 )
 from src.password_management import load_password, save_new_password, verify_password
 from src.embedding_control import reference_embeddings
@@ -76,6 +77,8 @@ class AppUI:
         self.login_error_label = None
 
         self.user_manager = UserManagement()
+
+        self.camera_cap = None
 
         self.gpio_enabled = _gpio_enabled_at_startup
         if self.gpio_enabled:
@@ -148,18 +151,37 @@ class AppUI:
             current_status_color = COLOR_ERROR_RED
 
             while not self.stop_flag:
-                # Fetch RGB and Depth frames from the Kinect
-                video_data = freenect.sync_get_video()
-                depth_data = freenect.sync_get_depth(format=freenect.DEPTH_11BIT)
 
-                if not video_data or not depth_data:
-                    raise RuntimeError("No camera feed from Kinect. Check USB connection.")
+                if CAMERA_TYPE == "Kinect":
+                    # Fetch RGB and Depth frames from the Kinect
+                    video_data = freenect.sync_get_video()
+                    depth_data = freenect.sync_get_depth(format=freenect.DEPTH_11BIT)
 
-                frame_rgb = video_data[0]
-                depth_frame = depth_data[0]
+                    if not video_data or not depth_data:
+                        raise RuntimeError("No camera feed from Kinect. Check USB connection.")
 
-                # Convert RGB from Kinect to BGR for OpenCV compatibility
-                frame = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
+                    frame_rgb = video_data[0]
+                    depth_frame = depth_data[0]
+
+                    # Convert RGB from Kinect to BGR for OpenCV compatibility
+                    frame = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
+
+                elif CAMERA_TYPE == "ZED":
+                    ret, sbs_frame = self.camera_cap.read()
+                    if not ret:
+                        raise RuntimeError("No camera feed from ZED. Check connection.")
+
+                    # Split the Side-by-Side ZED image
+                    h, w, _ = sbs_frame.shape
+                    half_w = w // 2
+                    frame = sbs_frame[:, :half_w]  # Left Camera
+                    right_frame = sbs_frame[:, half_w:]  # Right Camera
+
+                    # Compute Disparity/Depth Map using OpenCV CPU workaround
+                    gray_left = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                    gray_right = cv2.cvtColor(right_frame, cv2.COLOR_BGR2GRAY)
+                    disparity = self.stereo.compute(gray_left, gray_right).astype(np.float32) / 16.0
+                    depth_frame = disparity
 
                 frame_display = cv2.resize(frame, (DEFAULT_VIDEO_WIDTH, DEFAULT_VIDEO_HEIGHT))
 
@@ -251,6 +273,10 @@ class AppUI:
             print(f"Error in recognize_loop: {e}")
             self.root.after(0, self.update_status, f"Error: {e}", COLOR_ERROR_RED)
         finally:
+            if CAMERA_TYPE == "ZED" and self.camera_cap is not None:
+                self.camera_cap.release()
+                self.camera_cap = None
+
             if self.gpio_enabled:
                 try:
                     self.gpio_pin.off()
@@ -287,6 +313,23 @@ class AppUI:
 
         if self.verify_button:
             self.verify_button.config(state=tk.DISABLED)
+
+        if CAMERA_TYPE == "ZED":
+            self.camera_cap = cv2.VideoCapture(CAMERA_URL)
+            self.camera_cap.set(cv2.CAP_PROP_FRAME_WIDTH, 2560)
+            self.camera_cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+
+            self.stereo = cv2.StereoSGBM_create(
+                minDisparity=0,
+                numDisparities=64,
+                blockSize=9,
+                P1=8 * 3 * 9 ** 2,
+                P2=32 * 3 * 9 ** 2,
+                disp12MaxDiff=1,
+                uniquenessRatio=10,
+                speckleWindowSize=100,
+                speckleRange=32
+            )
 
         self.stop_flag = False
         # Start the heavy recognition process in a background thread to keep the UI smooth
@@ -572,6 +615,12 @@ class AppUI:
     def start_add_user_camera_stream(self):
         self.camera_capture_active = True
         self.latest_add_user_frame = None
+
+        if CAMERA_TYPE == "ZED":
+            self.camera_cap = cv2.VideoCapture(CAMERA_URL)
+            self.camera_cap.set(cv2.CAP_PROP_FRAME_WIDTH, 2560)
+            self.camera_cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+
         # Start background thread to keep the "Take Photo" UI from freezing
         self.add_user_camera_thread = threading.Thread(target=self.add_user_camera_loop, daemon=True)
         self.add_user_camera_thread.start()
@@ -579,17 +628,33 @@ class AppUI:
     def add_user_camera_loop(self):
         while self.camera_capture_active:
             try:
-                video_data = freenect.sync_get_video()
-                if video_data:
-                    self.latest_add_user_frame = video_data[0]
-                    frame_resized = cv2.resize(self.latest_add_user_frame, (DEFAULT_VIDEO_WIDTH, DEFAULT_VIDEO_HEIGHT))
-                    img = Image.fromarray(frame_resized)
-                    imgtk = ImageTk.PhotoImage(image=img)
-                    self.root.after(0, self.update_add_user_camera_preview, imgtk)
-                else:
-                    time.sleep(0.1)
+                if CAMERA_TYPE == "Kinect":
+                    video_data = freenect.sync_get_video()
+                    if video_data:
+                        self.latest_add_user_frame = video_data[0]
+                        frame_resized = cv2.resize(self.latest_add_user_frame,
+                                                   (DEFAULT_VIDEO_WIDTH, DEFAULT_VIDEO_HEIGHT))
+                        img = Image.fromarray(frame_resized)
+                        imgtk = ImageTk.PhotoImage(image=img)
+                        self.root.after(0, self.update_add_user_camera_preview, imgtk)
+                    else:
+                        time.sleep(0.1)
+                elif CAMERA_TYPE == "ZED":
+                    ret, sbs = self.camera_cap.read()
+                    if ret:
+                        h, w, _ = sbs.shape
+                        left_frame = sbs[:, :w // 2]
+                        # Convert to RGB to match Kinect's format natively
+                        self.latest_add_user_frame = cv2.cvtColor(left_frame, cv2.COLOR_BGR2RGB)
+                        frame_resized = cv2.resize(self.latest_add_user_frame,
+                                                   (DEFAULT_VIDEO_WIDTH, DEFAULT_VIDEO_HEIGHT))
+                        img = Image.fromarray(frame_resized)
+                        imgtk = ImageTk.PhotoImage(image=img)
+                        self.root.after(0, self.update_add_user_camera_preview, imgtk)
+                    else:
+                        time.sleep(0.1)
             except Exception as e:
-                print(f"Freenect stream error in Take Photo: {e}")
+                print(f"Stream error in Take Photo: {e}")
                 time.sleep(0.5)
             time.sleep(0.03)
 
@@ -601,7 +666,9 @@ class AppUI:
     def capture_photo_from_stream(self):
         self.camera_capture_active = False
 
-        # We intentionally DO NOT call freenect.sync_stop() here
+        if CAMERA_TYPE == "ZED" and self.camera_cap is not None:
+            self.camera_cap.release()
+            self.camera_cap = None
 
         if self.latest_add_user_frame is not None:
             frame_bgr = cv2.cvtColor(self.latest_add_user_frame, cv2.COLOR_RGB2BGR)
@@ -619,7 +686,9 @@ class AppUI:
 
     def cancel_take_photo(self):
         self.camera_capture_active = False
-        # We intentionally DO NOT call freenect.sync_stop() here
+        if CAMERA_TYPE == "ZED" and self.camera_cap is not None:
+            self.camera_cap.release()
+            self.camera_cap = None
         self.add_user_screen()
 
     def return_to_admin_options(self):
