@@ -45,7 +45,7 @@ class AppUI:
         self.root = root
         self.root.title("Access Control System")
         self.root.attributes('-fullscreen', True)
-        self.root.configure(bg=COLOR_PRIMARY_BG)  # Set the background color
+        self.root.configure(bg=COLOR_PRIMARY_BG)
 
         self.status_label = tk.Label(self.root, **STATUS_LABEL_STYLE)
         self.status_label.pack(pady=(10, 10))
@@ -136,8 +136,11 @@ class AppUI:
         gpio_high_active = False
         error_occurred = False
 
+        # --- TIMERS & FLAGS ---
         unlock_until = 0
         last_recognized_name = ""
+        spoof_halted = False
+        # ----------------------
 
         try:
             frame_counter = 0
@@ -145,7 +148,7 @@ class AppUI:
             current_status_color = COLOR_ERROR_RED
 
             while not self.stop_flag:
-                # Fetch RGB and Depth frames from freenect
+                # Fetch RGB and Depth frames from the Kinect
                 video_data = freenect.sync_get_video()
                 depth_data = freenect.sync_get_depth(format=freenect.DEPTH_11BIT)
 
@@ -168,6 +171,7 @@ class AppUI:
                 bbox = None
                 frame_counter += 1
 
+                # Only run the heavy recognition algorithms every few frames to save processing power
                 if frame_counter % DEFAULT_PROCESS_FRAME_RATE == 0:
                     recognized_name, detected_bbox_scaled = detect_and_recognize_face(
                         frame_process, depth_process, reference_embeddings, process_input_size
@@ -191,8 +195,6 @@ class AppUI:
                     if current_time <= unlock_until:
                         current_status_text = f"Unlocked: {last_recognized_name}"
                         current_status_color = COLOR_SUCCESS_GREEN
-
-                        # Keep the door unlocked
                         if self.gpio_enabled and not gpio_high_active:
                             try:
                                 self.gpio_pin.on()
@@ -203,36 +205,39 @@ class AppUI:
                     # 3. If the 3-second window is over (or never started)
                     else:
                         if recognized_name == "Spoof Detected":
-                            current_status_text = "Spoof Detected"
-                            current_status_color = COLOR_WARNING_ORANGE
+                            # SECURE THE PERIMETER
+                            if self.gpio_enabled and gpio_high_active:
+                                try:
+                                    self.gpio_pin.off()
+                                    gpio_high_active = False
+                                except Exception as e:
+                                    print(f"Error setting GPIO LOW: {e}")
+
+                            # FLAG THE SPOOF AND KILL THE LOOP INSTANTLY
+                            spoof_halted = True
+                            break
                         else:
                             current_status_text = "Locked"
                             current_status_color = COLOR_ERROR_RED
-
-                        # Lock the door
-                        if self.gpio_enabled and gpio_high_active:
-                            try:
-                                self.gpio_pin.off()
-                                gpio_high_active = False
-                            except Exception as e:
-                                print(f"Error setting GPIO LOW: {e}")
+                            if self.gpio_enabled and gpio_high_active:
+                                try:
+                                    self.gpio_pin.off()
+                                    gpio_high_active = False
+                                except Exception as e:
+                                    print(f"Error setting GPIO LOW: {e}")
 
                     # Safely update the graphical interface from the background thread
                     self.root.after(0, self.update_status, current_status_text, current_status_color)
 
                 if bbox:
                     x, y, w, h = bbox
-                    if recognized_name and recognized_name != "Spoof Detected":
-                        cv2.rectangle(frame_display, (x, y), (x + w, y + h), (0, 255, 0), 2)
-                    elif recognized_name == "Spoof Detected":
-                        cv2.rectangle(frame_display, (x, y), (x + w, y + h), (0, 165, 255), 2)
-                    else:
-                        cv2.rectangle(frame_display, (x, y), (x + w, y + h), (0, 0, 255), 2)
+                    cv2.rectangle(frame_display, (x, y), (x + w, y + h), (0, 0, 255), 2)
 
                 img = cv2.cvtColor(frame_display, cv2.COLOR_BGR2RGB)
                 img = Image.fromarray(img)
                 imgtk = ImageTk.PhotoImage(image=img)
 
+                # Safely update the video frame on the main UI
                 self.root.after(0, lambda: self.video_label.config(image=imgtk))
                 self.root.after(0, lambda: setattr(self.video_label, '_imgtk', imgtk))
 
@@ -246,7 +251,6 @@ class AppUI:
             print(f"Error in recognize_loop: {e}")
             self.root.after(0, self.update_status, f"Error: {e}", COLOR_ERROR_RED)
         finally:
-            # We intentionally DO NOT call freenect.sync_stop() here to prevent driver hang
             if self.gpio_enabled:
                 try:
                     self.gpio_pin.off()
@@ -255,11 +259,18 @@ class AppUI:
 
             self.recognition_running = False
             self.stop_flag = False
+
+            # Instantly clear the live camera feed and replace with blank background
             self.root.after(0, self.update_video_label_placeholder)
 
-            if not error_occurred:
+            # If the loop ended because of a spoof, display the permanent warning message
+            if spoof_halted:
+                self.root.after(0, self.update_status, "Security Alert: Spoofing Attempt! Camera Disabled.",
+                                COLOR_ERROR_RED)
+            elif not error_occurred:
                 self.root.after(0, self.update_status, "Idle", COLOR_IDLE_GRAY)
 
+            # Unlock the verify button so the user can restart the system
             if self.verify_button and self.verify_button.winfo_exists():
                 self.root.after(0, lambda: self.verify_button.config(state=tk.NORMAL))
 
@@ -278,6 +289,7 @@ class AppUI:
             self.verify_button.config(state=tk.DISABLED)
 
         self.stop_flag = False
+        # Start the heavy recognition process in a background thread to keep the UI smooth
         self.recognition_thread = threading.Thread(target=self.recognize_loop, daemon=True)
         self.recognition_thread.start()
         self.recognition_running = True
@@ -307,7 +319,7 @@ class AppUI:
         self.stop_recognition_and_video()
         if self.recognition_thread and self.recognition_thread.is_alive():
             self.recognition_thread.join(timeout=3.0)
-            # Safely shut down Kinect on complete application exit
+            # Safely shut down the Kinect driver only upon complete application exit
         try:
             freenect.sync_stop()
         except:
@@ -560,6 +572,7 @@ class AppUI:
     def start_add_user_camera_stream(self):
         self.camera_capture_active = True
         self.latest_add_user_frame = None
+        # Start background thread to keep the "Take Photo" UI from freezing
         self.add_user_camera_thread = threading.Thread(target=self.add_user_camera_loop, daemon=True)
         self.add_user_camera_thread.start()
 
