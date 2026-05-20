@@ -136,6 +136,9 @@ class AppUI:
         gpio_high_active = False
         error_occurred = False
 
+        unlock_until = 0
+        last_recognized_name = ""
+
         try:
             frame_counter = 0
             current_status_text = "Locked"
@@ -177,28 +180,36 @@ class AppUI:
                         bbox = (int(x * scale_factor_x), int(y * scale_factor_y),
                                 int(w * scale_factor_x), int(h * scale_factor_y))
 
-                    if recognized_name:
+                    current_time = time.time()
+
+                    # 1. If we see a real recognized face, reset the 3-second timer
+                    if recognized_name and recognized_name != "Spoof Detected":
+                        unlock_until = current_time + 3.0
+                        last_recognized_name = recognized_name
+
+                    # 2. If we are currently inside the 3-second unlock window
+                    if current_time <= unlock_until:
+                        current_status_text = f"Unlocked: {last_recognized_name}"
+                        current_status_color = COLOR_SUCCESS_GREEN
+
+                        # Keep the door unlocked
+                        if self.gpio_enabled and not gpio_high_active:
+                            try:
+                                self.gpio_pin.on()
+                                gpio_high_active = True
+                            except Exception as e:
+                                print(f"Error setting GPIO HIGH: {e}")
+
+                    # 3. If the 3-second window is over (or never started)
+                    else:
                         if recognized_name == "Spoof Detected":
                             current_status_text = "Spoof Detected"
                             current_status_color = COLOR_WARNING_ORANGE
-                            if self.gpio_enabled and gpio_high_active:
-                                try:
-                                    self.gpio_pin.off()
-                                    gpio_high_active = False
-                                except Exception as e:
-                                    print(f"Error setting GPIO LOW: {e}")
                         else:
-                            current_status_text = f"Unlocked: {recognized_name}"
-                            current_status_color = COLOR_SUCCESS_GREEN
-                            if self.gpio_enabled and not gpio_high_active:
-                                try:
-                                    self.gpio_pin.on()
-                                    gpio_high_active = True
-                                except Exception as e:
-                                    print(f"Error setting GPIO HIGH: {e}")
-                    else:
-                        current_status_text = "Locked"
-                        current_status_color = COLOR_ERROR_RED
+                            current_status_text = "Locked"
+                            current_status_color = COLOR_ERROR_RED
+
+                        # Lock the door
                         if self.gpio_enabled and gpio_high_active:
                             try:
                                 self.gpio_pin.off()
@@ -206,6 +217,7 @@ class AppUI:
                             except Exception as e:
                                 print(f"Error setting GPIO LOW: {e}")
 
+                    # Safely update the graphical interface from the background thread
                     self.root.after(0, self.update_status, current_status_text, current_status_color)
 
                 if bbox:
@@ -278,6 +290,18 @@ class AppUI:
         self.stop_flag = True
         self.camera_capture_active = False
         self.update_status("Stopping recognition...", COLOR_IDLE_GRAY)
+
+        # Force the UI to unlock after 2 seconds if the camera thread is deadlocked by macOS
+        self.root.after(2000, self.force_reset_ui)
+
+    def force_reset_ui(self):
+        # Only force reset if the thread is still stuck after 2 seconds
+        if self.recognition_running:
+            self.recognition_running = False
+            self.update_status("Camera Error: Check USB or run with sudo", COLOR_ERROR_RED)
+            self.update_video_label_placeholder(text="Connection Failed")
+            if self.verify_button and self.verify_button.winfo_exists():
+                self.verify_button.config(state=tk.NORMAL)
 
     def on_closing(self):
         self.stop_recognition_and_video()
