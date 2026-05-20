@@ -8,10 +8,12 @@ import time
 import os
 from datetime import datetime
 from tkcalendar import Calendar, DateEntry
+import freenect
 
 try:
     from gpiozero import OutputDevice
-    GPIO_PIN_OUTPUT = 17 # Pin 17
+
+    GPIO_PIN_OUTPUT = 17  # Pin 17
     _gpio_enabled_at_startup = True
     print(f"GPIOZero imported. GPIO control enabled on pin {GPIO_PIN_OUTPUT}.")
 except ImportError:
@@ -20,7 +22,6 @@ except ImportError:
 except Exception as e:
     print(f"Error importing GPIOZero: {e}. GPIO control disabled.")
     _gpio_enabled_at_startup = False
-
 
 from src.config import (
     ADMIN_PASSWORD, COLOR_PRIMARY_BG, COLOR_TEXT_LIGHT, COLOR_ERROR_RED,
@@ -33,17 +34,18 @@ from src.config import (
     CAMERA_URL, VERIFY_TIMER, DEFAULT_PROCESS_WIDTH, DEFAULT_APP_WIDTH, DEFAULT_APP_HEIGHT,
     DEFAULT_PROCESS_FRAME_RATE, ADMIN_OPTION_EXIT_BUTTON_STYLE, CANCEL_PHOTO_BUTTON_STYLE, LOGO_FILE
 )
-from src.password_management import load_password,save_new_password, verify_password
+from src.password_management import load_password, save_new_password, verify_password
 from src.embedding_control import reference_embeddings
 from src.face_recognition import detect_and_recognize_face, get_embedding_from_image
 from src.user_management import UserManagement
+
 
 class AppUI:
     def __init__(self, root):
         self.root = root
         self.root.title("Access Control System")
         self.root.attributes('-fullscreen', True)
-        self.root.configure(bg=COLOR_PRIMARY_BG) # Set the background color
+        self.root.configure(bg=COLOR_PRIMARY_BG)  # Set the background color
 
         self.status_label = tk.Label(self.root, **STATUS_LABEL_STYLE)
         self.status_label.pack(pady=(10, 10))
@@ -52,17 +54,16 @@ class AppUI:
         self.main_content_frame = tk.Frame(self.root, bg=COLOR_PRIMARY_BG)
         self.main_content_frame.pack(expand=True, fill="both", padx=10, pady=5)
 
-        self.recognition_running = False # Flag to check if the recognition loop is active
-        self.recognition_thread = None # Thread for the recognition loop
-        self.stop_flag = False # Flag to stop the recognition thread
-        self.cap = None # OpenCV video capture object
-        self.verification_timer = None # Timer to stop the recognition after a period
+        self.recognition_running = False
+        self.recognition_thread = None
+        self.stop_flag = False
+        self.verification_timer = None
 
         self.verify_button = None
 
-        self.temp_face_embedding = None # Stores the face embedding from image for new user registration
-        
-        self.temp_name_var = tk.StringVar(value="") # Stores user name for registration
+        self.temp_face_embedding = None
+
+        self.temp_name_var = tk.StringVar(value="")
         self.temp_start_date_var = tk.StringVar(value="")
         self.temp_end_date_var = tk.StringVar(value="")
         self.temp_undef_var = tk.BooleanVar()
@@ -74,44 +75,46 @@ class AppUI:
         self.admin_password_entry = None
         self.login_error_label = None
 
-        self.user_manager = UserManagement() # Instantiate the user management class
+        self.user_manager = UserManagement()
 
-        self.gpio_enabled = _gpio_enabled_at_startup # Check if GPIO is enabled at startup
+        self.gpio_enabled = _gpio_enabled_at_startup
         if self.gpio_enabled:
             try:
-                self.gpio_pin = OutputDevice(GPIO_PIN_OUTPUT) # Initialize GPIO pin as an output device
+                self.gpio_pin = OutputDevice(GPIO_PIN_OUTPUT)
                 print(f"GPIO pin {GPIO_PIN_OUTPUT} initialized as OutputDevice.")
             except Exception as e:
                 print(f"Failed to set up GPIOZero OutputDevice: {e}. GPIO control disabled.")
                 self.gpio_enabled = False
 
         self.video_label = None
-        self.add_user_camera_label = None # Label for the camera feed in the admin panel
-        self.camera_capture_active = False # Flag to indicate if camera capture is active
+        self.add_user_camera_label = None
+        self.camera_capture_active = False
+        self.add_user_camera_thread = None
+        self.latest_add_user_frame = None
 
-        self.back_to_main() # Start the main UI
-        
-        self.root.protocol("WM_DELETE_WINDOW", self.on_closing) # Handle window close event
+        self.back_to_main()
+
+        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
 
     def update_status(self, text, color):
         if self.status_label:
             if text != self.status_label.cget("text") or color != self.status_label.cget("fg"):
-                self.status_label.config(text=text, fg=color) # Update the status label's text and color
+                self.status_label.config(text=text, fg=color)
 
     def hex_to_rgb(self, hex_color):
         hex_color = hex_color.lstrip('#')
-        return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4)) # Convert a HEX color to an RGB tuple
+        return tuple(int(hex_color[i:i + 2], 16) for i in (0, 2, 4))
 
     def update_video_label_placeholder(self, text="Waiting . . .", target_label=None):
         if target_label is None:
             target_label = self.video_label
-        
+
         if target_label is None or not target_label.winfo_exists():
             return
 
-        blank_img = np.zeros((DEFAULT_VIDEO_HEIGHT, DEFAULT_VIDEO_WIDTH, 3), dtype=np.uint8) # Create a black image
+        blank_img = np.zeros((DEFAULT_VIDEO_HEIGHT, DEFAULT_VIDEO_WIDTH, 3), dtype=np.uint8)
         bgr_color = self.hex_to_rgb(COLOR_PRIMARY_BG)[::-1]
-        blank_img[:,:] = bgr_color # Fill the image with the background color
+        blank_img[:, :] = bgr_color
 
         font = cv2.FONT_HERSHEY_SIMPLEX
         font_scale = 0.9
@@ -122,7 +125,7 @@ class AppUI:
         text_x = (DEFAULT_VIDEO_WIDTH - text_size[0]) // 2
         text_y = (DEFAULT_VIDEO_HEIGHT + text_size[1]) // 2
 
-        cv2.putText(blank_img, text, (text_x, text_y), font, font_scale, text_color, font_thickness, cv2.LINE_AA) # Add text to the image
+        cv2.putText(blank_img, text, (text_x, text_y), font, font_scale, text_color, font_thickness, cv2.LINE_AA)
 
         img = Image.fromarray(blank_img)
         imgtk = ImageTk.PhotoImage(image=img)
@@ -131,26 +134,32 @@ class AppUI:
 
     def recognize_loop(self):
         gpio_high_active = False
+        error_occurred = False
 
         try:
-            if self.cap is None or not self.cap.isOpened():
-                self.cap = cv2.VideoCapture(CAMERA_URL) # Open the video capture
-                if not self.cap.isOpened():
-                    raise RuntimeError("Failed to open camera.")
-
             frame_counter = 0
             current_status_text = "Locked"
             current_status_color = COLOR_ERROR_RED
 
             while not self.stop_flag:
-                ret, frame = self.cap.read()
-                if not ret:
-                    raise RuntimeError("No camera feed or stream ended unexpectedly.")
+                # Fetch RGB and Depth frames from freenect
+                video_data = freenect.sync_get_video()
+                depth_data = freenect.sync_get_depth(format=freenect.DEPTH_11BIT)
+
+                if not video_data or not depth_data:
+                    raise RuntimeError("No camera feed from Kinect. Check USB connection.")
+
+                frame_rgb = video_data[0]
+                depth_frame = depth_data[0]
+
+                # Convert RGB from Kinect to BGR for OpenCV compatibility
+                frame = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
 
                 frame_display = cv2.resize(frame, (DEFAULT_VIDEO_WIDTH, DEFAULT_VIDEO_HEIGHT))
-                
+
                 PROCESS_HEIGHT = int(frame.shape[0] * (DEFAULT_PROCESS_WIDTH / frame.shape[1]))
                 frame_process = cv2.resize(frame, (DEFAULT_PROCESS_WIDTH, PROCESS_HEIGHT))
+                depth_process = cv2.resize(depth_frame, (DEFAULT_PROCESS_WIDTH, PROCESS_HEIGHT))
                 process_input_size = (DEFAULT_PROCESS_WIDTH, PROCESS_HEIGHT)
 
                 bbox = None
@@ -158,31 +167,41 @@ class AppUI:
 
                 if frame_counter % DEFAULT_PROCESS_FRAME_RATE == 0:
                     recognized_name, detected_bbox_scaled = detect_and_recognize_face(
-                        frame_process, reference_embeddings, process_input_size
+                        frame_process, depth_process, reference_embeddings, process_input_size
                     )
-                    
+
                     if detected_bbox_scaled:
                         scale_factor_x = DEFAULT_VIDEO_WIDTH / DEFAULT_PROCESS_WIDTH
                         scale_factor_y = DEFAULT_VIDEO_HEIGHT / PROCESS_HEIGHT
                         x, y, w, h = detected_bbox_scaled
                         bbox = (int(x * scale_factor_x), int(y * scale_factor_y),
-                                int(w * scale_factor_x), int(h * scale_factor_y)) # Scale the bounding box to display size
+                                int(w * scale_factor_x), int(h * scale_factor_y))
 
                     if recognized_name:
-                        current_status_text = f"Unlocked: {recognized_name}"
-                        current_status_color = COLOR_SUCCESS_GREEN
-                        if self.gpio_enabled and not gpio_high_active:
-                            try:
-                                self.gpio_pin.on() # Turn on the GPIO pin
-                                gpio_high_active = True
-                            except Exception as e:
-                                print(f"Error setting GPIO HIGH: {e}")
+                        if recognized_name == "Spoof Detected":
+                            current_status_text = "Spoof Detected"
+                            current_status_color = COLOR_WARNING_ORANGE
+                            if self.gpio_enabled and gpio_high_active:
+                                try:
+                                    self.gpio_pin.off()
+                                    gpio_high_active = False
+                                except Exception as e:
+                                    print(f"Error setting GPIO LOW: {e}")
+                        else:
+                            current_status_text = f"Unlocked: {recognized_name}"
+                            current_status_color = COLOR_SUCCESS_GREEN
+                            if self.gpio_enabled and not gpio_high_active:
+                                try:
+                                    self.gpio_pin.on()
+                                    gpio_high_active = True
+                                except Exception as e:
+                                    print(f"Error setting GPIO HIGH: {e}")
                     else:
                         current_status_text = "Locked"
                         current_status_color = COLOR_ERROR_RED
                         if self.gpio_enabled and gpio_high_active:
                             try:
-                                self.gpio_pin.off() # Turn off the GPIO pin
+                                self.gpio_pin.off()
                                 gpio_high_active = False
                             except Exception as e:
                                 print(f"Error setting GPIO LOW: {e}")
@@ -191,32 +210,31 @@ class AppUI:
 
                 if bbox:
                     x, y, w, h = bbox
-                    if recognized_name:
-                        cv2.rectangle(frame_display, (x, y), (x + w, y + h), (0, 255, 0), 2) # Draw a green rectangle for recognized faces
+                    if recognized_name and recognized_name != "Spoof Detected":
+                        cv2.rectangle(frame_display, (x, y), (x + w, y + h), (0, 255, 0), 2)
+                    elif recognized_name == "Spoof Detected":
+                        cv2.rectangle(frame_display, (x, y), (x + w, y + h), (0, 165, 255), 2)
                     else:
-                        cv2.rectangle(frame_display, (x, y), (x + w, y + h), (0, 0, 255), 2) # Draw a red rectangle for unrecognized faces
-                
+                        cv2.rectangle(frame_display, (x, y), (x + w, y + h), (0, 0, 255), 2)
+
                 img = cv2.cvtColor(frame_display, cv2.COLOR_BGR2RGB)
                 img = Image.fromarray(img)
                 imgtk = ImageTk.PhotoImage(image=img)
 
-                self.root.after(0, lambda: self.video_label.config(image=imgtk)) # Update the image on the video label
+                self.root.after(0, lambda: self.video_label.config(image=imgtk))
                 self.root.after(0, lambda: setattr(self.video_label, '_imgtk', imgtk))
 
                 time.sleep(0.01)
 
         except RuntimeError as e:
-            # Let the finally block handle cleanup
+            error_occurred = True
             self.root.after(0, self.update_status, str(e), COLOR_ERROR_RED)
         except Exception as e:
-            # Let the finally block handle cleanup
+            error_occurred = True
             print(f"Error in recognize_loop: {e}")
+            self.root.after(0, self.update_status, f"Error: {e}", COLOR_ERROR_RED)
         finally:
-            # The cleanup happens in the recognition thread itself.
-            if self.cap and self.cap.isOpened():
-                self.cap.release()
-            self.cap = None
-
+            # We intentionally DO NOT call freenect.sync_stop() here to prevent driver hang
             if self.gpio_enabled:
                 try:
                     self.gpio_pin.off()
@@ -226,11 +244,13 @@ class AppUI:
             self.recognition_running = False
             self.stop_flag = False
             self.root.after(0, self.update_video_label_placeholder)
-            self.root.after(0, self.update_status, "Idle", COLOR_IDLE_GRAY)
-            
+
+            if not error_occurred:
+                self.root.after(0, self.update_status, "Idle", COLOR_IDLE_GRAY)
+
             if self.verify_button and self.verify_button.winfo_exists():
                 self.root.after(0, lambda: self.verify_button.config(state=tk.NORMAL))
-            
+
             if self.verification_timer:
                 self.root.after_cancel(self.verification_timer)
                 self.verification_timer = None
@@ -243,36 +263,39 @@ class AppUI:
             self.verification_timer = None
 
         if self.verify_button:
-            self.verify_button.config(state=tk.DISABLED) # Disable the button to prevent multiple clicks
+            self.verify_button.config(state=tk.DISABLED)
 
         self.stop_flag = False
-        self.recognition_thread = threading.Thread(target=self.recognize_loop, daemon=True) # Start the recognition loop in a new thread
+        self.recognition_thread = threading.Thread(target=self.recognize_loop, daemon=True)
         self.recognition_thread.start()
         self.recognition_running = True
         self.update_status("Initializing camera...", COLOR_IDLE_GRAY)
-        self.verification_timer = self.root.after(VERIFY_TIMER, self.stop_recognition_and_video) # Set a timer to stop the recognition automatically
-        
+        self.verification_timer = self.root.after(VERIFY_TIMER, self.stop_recognition_and_video)
+
     def stop_recognition_and_video(self):
-        # This function just signals that the loop should stop
         if not self.recognition_running:
             return
         self.stop_flag = True
         self.camera_capture_active = False
         self.update_status("Stopping recognition...", COLOR_IDLE_GRAY)
-    
+
     def on_closing(self):
-        # Call stop and wait for the recognition thread to finish
         self.stop_recognition_and_video()
         if self.recognition_thread and self.recognition_thread.is_alive():
-            self.recognition_thread.join(timeout=3.0) # Wait up to 3 seconds
+            self.recognition_thread.join(timeout=3.0)
+            # Safely shut down Kinect on complete application exit
+        try:
+            freenect.sync_stop()
+        except:
+            pass
         self.root.destroy()
 
     def clear_main_content_frame(self):
         for widget in self.main_content_frame.winfo_children():
-            if widget != self.video_label: # Do not clear the video label
+            if widget != self.video_label:
                 widget.destroy()
 
-################################################ MAIN SCREEN ################################################
+    ################################################ MAIN SCREEN ################################################
     def back_to_main(self):
         self.stop_recognition_and_video()
         self.clear_main_content_frame()
@@ -282,7 +305,7 @@ class AppUI:
         self.main_content_frame.grid_columnconfigure(2, weight=1)
         self.main_content_frame.grid_rowconfigure(0, weight=1)
         self.main_content_frame.grid_rowconfigure(1, weight=1)
-        
+
         self.temp_face_embedding = None
         self.temp_name_var.set("")
         self.temp_start_date_var.set("")
@@ -293,10 +316,10 @@ class AppUI:
         if self.login_error_label and self.login_error_label.winfo_exists():
             self.login_error_label.destroy()
             self.login_error_label = None
-        
+
         if self.video_label is None or not self.video_label.winfo_exists():
             self.video_label = tk.Label(self.main_content_frame, bg=self.main_content_frame["bg"],
-                                         width=DEFAULT_VIDEO_WIDTH, height=DEFAULT_VIDEO_HEIGHT)
+                                        width=DEFAULT_VIDEO_WIDTH, height=DEFAULT_VIDEO_HEIGHT)
         self.video_label.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
         self.update_video_label_placeholder()
 
@@ -311,7 +334,6 @@ class AppUI:
         button_column_frame.grid_rowconfigure(1, weight=0)
         button_column_frame.grid_rowconfigure(2, weight=0)
         button_column_frame.grid_rowconfigure(3, weight=1)
-        
 
         original_image = Image.open(LOGO_FILE)
         resized_image = original_image.resize((130, 120), Image.LANCZOS)
@@ -320,23 +342,23 @@ class AppUI:
         self.logo_label = tk.Label(button_column_frame, image=self.logo_image, bg=button_column_frame["bg"])
         self.logo_label.grid(row=0, column=0, pady=(20, 10), sticky="n")
 
-
         self.verify_button = tk.Button(button_column_frame, text="Verify", command=self.start_recognition,
-                                         **VERIFY_BUTTON_STYLE)
+                                       **VERIFY_BUTTON_STYLE)
         self.verify_button.grid(row=1, column=0, pady=10, sticky="ew")
 
         tk.Button(button_column_frame, text="Admin Settings", command=self.admin_settings_login,
-                    **ADMIN_SETTINGS_BUTTON_STYLE).grid(row=2, column=0, pady=10, sticky="ew")
+                  **ADMIN_SETTINGS_BUTTON_STYLE).grid(row=2, column=0, pady=10, sticky="ew")
 
         self.update_status("Idle", COLOR_IDLE_GRAY)
-################################################ ADMIN LOGIN ################################################
+
+    ################################################ ADMIN LOGIN ################################################
     def admin_settings_login(self):
         self.stop_recognition_and_video()
         self.clear_main_content_frame()
         self.update_status("Admin Login", COLOR_WARNING_ORANGE)
 
         if self.video_label and self.video_label.winfo_exists():
-            self.video_label.grid_forget() 
+            self.video_label.grid_forget()
 
         self.main_content_frame.grid_columnconfigure(0, weight=1)
         self.main_content_frame.grid_columnconfigure(1, weight=1)
@@ -347,7 +369,7 @@ class AppUI:
         login_frame = tk.Frame(self.main_content_frame, bg=COLOR_PRIMARY_BG)
         login_frame.grid(row=1, column=1, pady=20, sticky="nsew")
 
-        tk.Label(login_frame, text="Password:", **LABEL_STYLE).pack(pady=(0,10))
+        tk.Label(login_frame, text="Password:", **LABEL_STYLE).pack(pady=(0, 10))
         self.admin_password_entry = tk.Entry(login_frame, **INPUT_FIELD_STYLE, show='*')
         self.admin_password_entry.pack(ipadx=10, ipady=5)
         self.admin_password_entry.bind("<Return>", lambda event=None: self.check_admin_password())
@@ -361,24 +383,25 @@ class AppUI:
     def check_admin_password(self):
         check_password = self.admin_password_entry.get().strip()
         correct_password = load_password()
-        if verify_password(check_password,correct_password):
+        if verify_password(check_password, correct_password):
             if self.login_error_label:
                 self.login_error_label.config(text="")
             self.show_admin_options()
         else:
             if self.login_error_label:
                 self.login_error_label.config(text="Incorrect password.")
-            self.admin_password_entry.delete(0,tk.END)
-################################################ ADMIN OPTIONS ################################################
+            self.admin_password_entry.delete(0, tk.END)
+
+    ################################################ ADMIN OPTIONS ################################################
     def show_admin_options(self):
-            
+
         self.clear_main_content_frame()
         if self.login_error_label and self.login_error_label.winfo_exists():
             self.login_error_label.destroy()
             self.login_error_label = None
 
         if self.video_label and self.video_label.winfo_exists():
-            self.video_label.grid_forget() 
+            self.video_label.grid_forget()
         self.update_status("Admin Mode", COLOR_WARNING_ORANGE)
 
         self.main_content_frame.grid_columnconfigure(0, weight=1)
@@ -391,48 +414,52 @@ class AppUI:
         admin_buttons_frame.grid(row=1, column=1, pady=20, sticky="nsew")
 
         tk.Button(admin_buttons_frame, text="Add User", command=self.add_user_screen,
-                    **ADMIN_OPTION_BUTTON_STYLE).pack(fill='x', pady=8)
+                  **ADMIN_OPTION_BUTTON_STYLE).pack(fill='x', pady=8)
         tk.Button(admin_buttons_frame, text="Delete User", command=self.delete_user_screen,
-                    **ADMIN_OPTION_BUTTON_STYLE).pack(fill='x', pady=8)
+                  **ADMIN_OPTION_BUTTON_STYLE).pack(fill='x', pady=8)
         tk.Button(admin_buttons_frame, text="Change Password", command=self.change_password_screen,
-                    **ADMIN_OPTION_BUTTON_STYLE).pack(fill='x', pady=8)
+                  **ADMIN_OPTION_BUTTON_STYLE).pack(fill='x', pady=8)
         tk.Button(admin_buttons_frame, text="Exit Admin", command=self.back_to_main,
-                    **ADMIN_OPTION_EXIT_BUTTON_STYLE).pack(fill='x', pady=20)
-################################################ ADD USER ################################################
+                  **ADMIN_OPTION_EXIT_BUTTON_STYLE).pack(fill='x', pady=20)
+
+    ################################################ ADD USER ################################################
 
     def add_user_screen(self):
-        self.stop_recognition_and_video() 
+        self.stop_recognition_and_video()
         self.clear_main_content_frame()
         if self.video_label and self.video_label.winfo_exists():
             self.video_label.grid_forget()
 
         self.update_status("Add User", COLOR_WARNING_ORANGE)
 
-        self.main_content_frame.grid_columnconfigure(0, weight=1)  
-        self.main_content_frame.grid_columnconfigure(1, weight=0) 
-        self.main_content_frame.grid_columnconfigure(2, weight=1)  
-        self.main_content_frame.grid_rowconfigure(0, weight=1)    
+        self.main_content_frame.grid_columnconfigure(0, weight=1)
+        self.main_content_frame.grid_columnconfigure(1, weight=0)
+        self.main_content_frame.grid_columnconfigure(2, weight=1)
+        self.main_content_frame.grid_rowconfigure(0, weight=1)
         add_user_form_frame = tk.Frame(self.main_content_frame, bg=COLOR_PRIMARY_BG)
 
-        add_user_form_frame.grid(row=0, column=1, padx=20, pady=10, sticky="nsew") 
-        
-        add_user_form_frame.grid_columnconfigure(0, weight=0) 
-        add_user_form_frame.grid_columnconfigure(1, weight=1) 
+        add_user_form_frame.grid(row=0, column=1, padx=20, pady=10, sticky="nsew")
+
+        add_user_form_frame.grid_columnconfigure(0, weight=0)
+        add_user_form_frame.grid_columnconfigure(1, weight=1)
 
         row_idx = 0
 
-        tk.Label(add_user_form_frame, text="Name:", **LABEL_STYLE).grid(row=row_idx, column=0, sticky="w", padx=5, pady=3)
+        tk.Label(add_user_form_frame, text="Name:", **LABEL_STYLE).grid(row=row_idx, column=0, sticky="w", padx=5,
+                                                                        pady=3)
         self.temp_name_entry = tk.Entry(add_user_form_frame, textvariable=self.temp_name_var, **INPUT_FIELD_STYLE)
         self.temp_name_entry.grid(row=row_idx, column=1, sticky="ew", padx=5, pady=3)
         row_idx += 1
 
-        tk.Label(add_user_form_frame, text="Start Date:", **LABEL_STYLE).grid(row=row_idx, column=0, sticky="w", padx=5, pady=3)
+        tk.Label(add_user_form_frame, text="Start Date:", **LABEL_STYLE).grid(row=row_idx, column=0, sticky="w", padx=5,
+                                                                              pady=3)
         self.temp_start_entry = DateEntry(add_user_form_frame, **INPUT_FIELD_STYLE, date_pattern='yyyy-mm-dd',
                                           textvariable=self.temp_start_date_var)
         self.temp_start_entry.grid(row=row_idx, column=1, sticky="ew", padx=5, pady=3)
         row_idx += 1
 
-        tk.Label(add_user_form_frame, text="End Date:", **LABEL_STYLE).grid(row=row_idx, column=0, sticky="w", padx=5, pady=3)
+        tk.Label(add_user_form_frame, text="End Date:", **LABEL_STYLE).grid(row=row_idx, column=0, sticky="w", padx=5,
+                                                                            pady=3)
         self.temp_end_entry = DateEntry(add_user_form_frame, **INPUT_FIELD_STYLE, date_pattern='yyyy-mm-dd',
                                         textvariable=self.temp_end_date_var)
         self.temp_end_entry.grid(row=row_idx, column=1, sticky="ew", padx=5, pady=3)
@@ -440,16 +467,16 @@ class AppUI:
 
         undef_check = tk.Checkbutton(add_user_form_frame, text="Undefined Period", variable=self.temp_undef_var,
                                      **CHECKBOX_STYLE)
-        undef_check.grid(row=row_idx, column=0, columnspan=2, pady=10, sticky="w") 
+        undef_check.grid(row=row_idx, column=0, columnspan=2, pady=10, sticky="w")
         row_idx += 1
 
         tk.Button(add_user_form_frame, text="Choose Image", command=self.process_chosen_image,
-                     **CHOOSE_IMAGE_BUTTON_STYLE).grid(row=row_idx, column=0, columnspan=2, pady=5)
-        
+                  **CHOOSE_IMAGE_BUTTON_STYLE).grid(row=row_idx, column=0, columnspan=2, pady=5)
+
         row_idx += 1
-        
+
         tk.Button(add_user_form_frame, text="Take Photo", command=self.take_photo_screen,
-                     **CHOOSE_IMAGE_BUTTON_STYLE).grid(row=row_idx, column=0, columnspan=2, pady=5)
+                  **CHOOSE_IMAGE_BUTTON_STYLE).grid(row=row_idx, column=0, columnspan=2, pady=5)
         row_idx += 1
 
         self.face_detection_status_label = tk.Label(add_user_form_frame, text="No image selected.", **INFO_LABEL_STYLE)
@@ -457,119 +484,106 @@ class AppUI:
         row_idx += 1
 
         register_button_frame = tk.Frame(add_user_form_frame, bg=COLOR_PRIMARY_BG)
-        register_button_frame.grid(row=row_idx, column=0, columnspan=2, pady=5) 
-        
+        register_button_frame.grid(row=row_idx, column=0, columnspan=2, pady=5)
+
         register_button_frame.grid_columnconfigure(0, weight=1)
         register_button_frame.grid_columnconfigure(1, weight=1)
 
         self.register_user_btn = tk.Button(register_button_frame, text="Add User", command=self.register_user_data,
-                                             **REGISTER_USER_BUTTON_STYLE)
-        self.register_user_btn.pack(side=tk.LEFT, padx=5) 
+                                           **REGISTER_USER_BUTTON_STYLE)
+        self.register_user_btn.pack(side=tk.LEFT, padx=5)
 
         tk.Button(register_button_frame, text="Cancel", command=self.return_to_admin_options,
-                     **CANCEL_BUTTON_STYLE).pack(side=tk.LEFT, padx=5) 
-        
+                  **CANCEL_BUTTON_STYLE).pack(side=tk.LEFT, padx=5)
+
         if self.temp_face_embedding is not None:
             self.face_detection_status_label.config(text="Face loaded.", fg=COLOR_SUCCESS_GREEN)
         else:
             self.face_detection_status_label.config(text="No image selected.", fg=COLOR_TEXT_LIGHT)
 
-################################################ TAKE PHOTO ################################################
-
+    ################################################ TAKE PHOTO ################################################
 
     def take_photo_screen(self):
         self.clear_main_content_frame()
         self.update_status("Take Photo", COLOR_WARNING_ORANGE)
 
-        self.main_content_frame.grid_columnconfigure(0, weight=1) 
-        self.main_content_frame.grid_columnconfigure(1, weight=0)  
-        self.main_content_frame.grid_columnconfigure(2, weight=0)  
-      
-        self.main_content_frame.grid_rowconfigure(0, weight=1)     
-        self.main_content_frame.grid_rowconfigure(1, weight=0)     
-        self.main_content_frame.grid_rowconfigure(2, weight=1)     
-        
+        self.main_content_frame.grid_columnconfigure(0, weight=1)
+        self.main_content_frame.grid_columnconfigure(1, weight=0)
+        self.main_content_frame.grid_columnconfigure(2, weight=0)
+
+        self.main_content_frame.grid_rowconfigure(0, weight=1)
+        self.main_content_frame.grid_rowconfigure(1, weight=0)
+        self.main_content_frame.grid_rowconfigure(2, weight=1)
 
         camera_frame = tk.Frame(self.main_content_frame, bg=COLOR_PRIMARY_BG)
-        camera_frame.grid(row=1, column=0, padx=10, pady=10, sticky="nsew") 
+        camera_frame.grid(row=1, column=0, padx=10, pady=10, sticky="nsew")
 
         self.add_user_camera_label = tk.Label(camera_frame, bg=camera_frame["bg"],
-                                                   width=DEFAULT_VIDEO_WIDTH, height=DEFAULT_VIDEO_HEIGHT)
+                                              width=DEFAULT_VIDEO_WIDTH, height=DEFAULT_VIDEO_HEIGHT)
         self.add_user_camera_label.pack(expand=True, fill="both")
 
         button_frame = tk.Frame(self.main_content_frame, bg=COLOR_PRIMARY_BG)
 
-        button_frame.grid(row=1, column=2, padx=30, pady=10, sticky="ns") 
+        button_frame.grid(row=1, column=2, padx=30, pady=10, sticky="ns")
 
         tk.Button(button_frame, text="Capture", command=self.capture_photo_from_stream,
-                     **VERIFY_BUTTON_STYLE).pack(pady=10)
+                  **VERIFY_BUTTON_STYLE).pack(pady=10)
         tk.Button(button_frame, text="Cancel", command=self.cancel_take_photo,
-                     **CANCEL_PHOTO_BUTTON_STYLE).pack(pady=10)
+                  **CANCEL_PHOTO_BUTTON_STYLE).pack(pady=10)
 
         self.start_add_user_camera_stream()
 
-
     def start_add_user_camera_stream(self):
-        if self.cap and self.cap.isOpened():
-            self.cap.release()
-            self.cap = None
-
         self.camera_capture_active = True
-        self.cap = cv2.VideoCapture(CAMERA_URL)
-        if not self.cap.isOpened():
-            messagebox.showerror("Error", "Could not open camera for taking photo.")
-            self.camera_capture_active = False
-            self.update_video_label_placeholder(text="Camera Error", target_label=self.add_user_camera_label)
-            return
-        self.update_add_user_camera_preview()
+        self.latest_add_user_frame = None
+        self.add_user_camera_thread = threading.Thread(target=self.add_user_camera_loop, daemon=True)
+        self.add_user_camera_thread.start()
 
-    def update_add_user_camera_preview(self):
-        if not self.camera_capture_active or not self.add_user_camera_label.winfo_exists():
-            if self.cap and self.cap.isOpened():
-                self.cap.release()
-                self.cap = None
-            return
+    def add_user_camera_loop(self):
+        while self.camera_capture_active:
+            try:
+                video_data = freenect.sync_get_video()
+                if video_data:
+                    self.latest_add_user_frame = video_data[0]
+                    frame_resized = cv2.resize(self.latest_add_user_frame, (DEFAULT_VIDEO_WIDTH, DEFAULT_VIDEO_HEIGHT))
+                    img = Image.fromarray(frame_resized)
+                    imgtk = ImageTk.PhotoImage(image=img)
+                    self.root.after(0, self.update_add_user_camera_preview, imgtk)
+                else:
+                    time.sleep(0.1)
+            except Exception as e:
+                print(f"Freenect stream error in Take Photo: {e}")
+                time.sleep(0.5)
+            time.sleep(0.03)
 
-        ret, frame = self.cap.read()
-        if ret:
-            frame = cv2.resize(frame, (DEFAULT_VIDEO_WIDTH, DEFAULT_VIDEO_HEIGHT))
-            cv2image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            img = Image.fromarray(cv2image)
-            imgtk = ImageTk.PhotoImage(image=img)
+    def update_add_user_camera_preview(self, imgtk):
+        if self.camera_capture_active and self.add_user_camera_label and self.add_user_camera_label.winfo_exists():
             self.add_user_camera_label.imgtk = imgtk
             self.add_user_camera_label.configure(image=imgtk)
-        
-        self.root.after(10, self.update_add_user_camera_preview)
-    
-    def capture_photo_from_stream(self):
-        if self.cap and self.cap.isOpened():
-            ret, frame = self.cap.read()
-            if ret:
-                self.camera_capture_active = False 
-                if self.cap and self.cap.isOpened(): 
-                    self.cap.release()
-                    self.cap = None
 
-                temp_file = "temp_capture.jpg"
-                cv2.imwrite(temp_file, frame)
-                
-                embedding, _, _ = get_embedding_from_image(
-                    temp_file, (DEFAULT_VIDEO_WIDTH, DEFAULT_VIDEO_HEIGHT))
-                self.temp_face_embedding = embedding
-                
+    def capture_photo_from_stream(self):
+        self.camera_capture_active = False
+
+        # We intentionally DO NOT call freenect.sync_stop() here
+
+        if self.latest_add_user_frame is not None:
+            frame_bgr = cv2.cvtColor(self.latest_add_user_frame, cv2.COLOR_RGB2BGR)
+            temp_file = "temp_capture.jpg"
+            cv2.imwrite(temp_file, frame_bgr)
+
+            embedding, _, _ = get_embedding_from_image(
+                temp_file, (DEFAULT_VIDEO_WIDTH, DEFAULT_VIDEO_HEIGHT))
+            self.temp_face_embedding = embedding
+
+            if os.path.exists(temp_file):
                 os.remove(temp_file)
 
-                self.add_user_screen()
+        self.add_user_screen()
 
     def cancel_take_photo(self):
         self.camera_capture_active = False
-        if self.cap and self.cap.isOpened():
-            self.cap.release()
-            self.cap = None
+        # We intentionally DO NOT call freenect.sync_stop() here
         self.add_user_screen()
-        
-
-
 
     def return_to_admin_options(self):
         self.temp_name_var.set("")
@@ -581,10 +595,9 @@ class AppUI:
             self.face_detection_status_label.config(text="No image selected.", fg=COLOR_TEXT_LIGHT)
         if self.register_user_btn and self.register_user_btn.winfo_exists():
             self.register_user_btn.config(state=tk.DISABLED)
-        
+
         self.show_admin_options()
-        
-        
+
     def process_chosen_image(self, filepath=None):
         if filepath is None:
             filepath = filedialog.askopenfilename(filetypes=[("Image files", "*.jpg *.jpeg *.png")])
@@ -627,8 +640,8 @@ class AppUI:
             self.show_admin_options()
         else:
             messagebox.showerror("Error", message)
-            
-################################################ DELETE USER ################################################
+
+    ################################################ DELETE USER ################################################
     def delete_user_screen(self):
         self.stop_recognition_and_video()
         self.clear_main_content_frame()
@@ -644,7 +657,7 @@ class AppUI:
         delete_user_frame = tk.Frame(self.main_content_frame, bg=COLOR_PRIMARY_BG)
         delete_user_frame.grid(row=0, column=1, padx=20, pady=20, sticky="nsew")
 
-        tk.Label(delete_user_frame, text="Select a user to delete:", **LABEL_STYLE).pack(pady=(10,10))
+        tk.Label(delete_user_frame, text="Select a user to delete:", **LABEL_STYLE).pack(pady=(10, 10))
 
         listbox_container = tk.Frame(delete_user_frame, bg=COLOR_PRIMARY_BG)
         listbox_container.pack(pady=10, padx=10, fill="both", expand=True)
@@ -662,9 +675,9 @@ class AppUI:
         button_frame.pack(pady=15)
 
         tk.Button(button_frame, text="Delete", command=self.confirm_delete_user,
-                    **DELETE_BUTTON_STYLE).pack(side=tk.LEFT, padx=10)
+                  **DELETE_BUTTON_STYLE).pack(side=tk.LEFT, padx=10)
         tk.Button(button_frame, text="Cancel", command=self.show_admin_options,
-                    **CANCEL_BUTTON_STYLE).pack(side=tk.LEFT, padx=10)
+                  **CANCEL_BUTTON_STYLE).pack(side=tk.LEFT, padx=10)
 
     def _populate_delete_listbox(self):
         self.delete_listbox.delete(0, tk.END)
@@ -689,58 +702,59 @@ class AppUI:
         else:
             messagebox.showwarning("No Selection", "Please select a user to delete.")
 
-################################################ CHANGE PASSWORD ################################################
+    ################################################ CHANGE PASSWORD ################################################
 
     def change_password_screen(self):
-            self.clear_main_content_frame()
-            if self.video_label and self.video_label.winfo_exists():
-                self.video_label.grid_forget()
-            self.update_status("Change Admin Password", COLOR_WARNING_ORANGE)
+        self.clear_main_content_frame()
+        if self.video_label and self.video_label.winfo_exists():
+            self.video_label.grid_forget()
+        self.update_status("Change Admin Password", COLOR_WARNING_ORANGE)
 
-            self.main_content_frame.grid_columnconfigure(0, weight=1)
-            self.main_content_frame.grid_columnconfigure(1, weight=1)
-            self.main_content_frame.grid_columnconfigure(2, weight=1)
-            self.main_content_frame.grid_rowconfigure(0, weight=1)
+        self.main_content_frame.grid_columnconfigure(0, weight=1)
+        self.main_content_frame.grid_columnconfigure(1, weight=1)
+        self.main_content_frame.grid_columnconfigure(2, weight=1)
+        self.main_content_frame.grid_rowconfigure(0, weight=1)
 
-            change_pass_frame = tk.Frame(self.main_content_frame, bg=COLOR_PRIMARY_BG)
-            change_pass_frame.grid(row=0, column=1, pady=20, sticky="nsew")
+        change_pass_frame = tk.Frame(self.main_content_frame, bg=COLOR_PRIMARY_BG)
+        change_pass_frame.grid(row=0, column=1, pady=20, sticky="nsew")
 
-            tk.Label(change_pass_frame, text="Enter New Password:", **LABEL_STYLE).pack(pady=(0, 5))
-            self.new_password_entry = tk.Entry(change_pass_frame, **INPUT_FIELD_STYLE, show='*')
-            self.new_password_entry.pack(ipadx=10, ipady=5)
+        tk.Label(change_pass_frame, text="Enter New Password:", **LABEL_STYLE).pack(pady=(0, 5))
+        self.new_password_entry = tk.Entry(change_pass_frame, **INPUT_FIELD_STYLE, show='*')
+        self.new_password_entry.pack(ipadx=10, ipady=5)
 
-            tk.Label(change_pass_frame, text="Repeat New Password:", **LABEL_STYLE).pack(pady=(10, 5))
-            self.confirm_password_entry = tk.Entry(change_pass_frame, **INPUT_FIELD_STYLE, show='*')
-            self.confirm_password_entry.pack(ipadx=10, ipady=5)
-            
-            self.password_change_status_label = tk.Label(change_pass_frame, text="", **INFO_LABEL_STYLE)
-            self.password_change_status_label.pack(pady=(10, 0))
+        tk.Label(change_pass_frame, text="Repeat New Password:", **LABEL_STYLE).pack(pady=(10, 5))
+        self.confirm_password_entry = tk.Entry(change_pass_frame, **INPUT_FIELD_STYLE, show='*')
+        self.confirm_password_entry.pack(ipadx=10, ipady=5)
 
-            tk.Button(change_pass_frame, text="Save", command=self.save_new_admin_password,
-                    **LOGIN_BUTTON_STYLE).pack(pady=15)
-            tk.Button(change_pass_frame, text="Cancel", command=self.show_admin_options,
-                    **CANCEL_BUTTON_STYLE).pack(pady=10)
+        self.password_change_status_label = tk.Label(change_pass_frame, text="", **INFO_LABEL_STYLE)
+        self.password_change_status_label.pack(pady=(10, 0))
+
+        tk.Button(change_pass_frame, text="Save", command=self.save_new_admin_password,
+                  **LOGIN_BUTTON_STYLE).pack(pady=15)
+        tk.Button(change_pass_frame, text="Cancel", command=self.show_admin_options,
+                  **CANCEL_BUTTON_STYLE).pack(pady=10)
 
     def save_new_admin_password(self):
-            new_pass = self.new_password_entry.get().strip()
-            confirm_pass = self.confirm_password_entry.get().strip()
+        new_pass = self.new_password_entry.get().strip()
+        confirm_pass = self.confirm_password_entry.get().strip()
 
-            if not new_pass or not confirm_pass:
-                self.password_change_status_label.config(text="Password fields cannot be empty.", fg=COLOR_ERROR_RED)
-                return
+        if not new_pass or not confirm_pass:
+            self.password_change_status_label.config(text="Password fields cannot be empty.", fg=COLOR_ERROR_RED)
+            return
 
-            if new_pass != confirm_pass:
-                self.password_change_status_label.config(text="Passwords do not match.", fg=COLOR_ERROR_RED)
-                self.new_password_entry.delete(0, tk.END)
-                self.confirm_password_entry.delete(0, tk.END)
-                return
+        if new_pass != confirm_pass:
+            self.password_change_status_label.config(text="Passwords do not match.", fg=COLOR_ERROR_RED)
+            self.new_password_entry.delete(0, tk.END)
+            self.confirm_password_entry.delete(0, tk.END)
+            return
 
-            success = save_new_password(new_pass)
-            if success:
-                messagebox.showinfo("Success", "Password changed succesfully")
-                self.show_admin_options()
-            else:
-                self.password_change_status_label.config(text="Operation failed.", fg=COLOR_ERROR_RED)
+        success = save_new_password(new_pass)
+        if success:
+            messagebox.showinfo("Success", "Password changed succesfully")
+            self.show_admin_options()
+        else:
+            self.password_change_status_label.config(text="Operation failed.", fg=COLOR_ERROR_RED)
+
 
 if __name__ == "__main__":
     root = tk.Tk()
