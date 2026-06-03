@@ -1,0 +1,8 @@
+#!/bin/bash
+
+PROJECT_ROOT="/home/pi/Desktop/FaceRecog"
+PYTHON_SCRIPT="$PROJECT_ROOT/main.py"
+
+PYTHON_EXECUTABLE="$PROJECT_ROOT/venv/bin/python3" 
+
+$PYTHON_EXECUTABLE "$PYTHON_SCRIPT" 
